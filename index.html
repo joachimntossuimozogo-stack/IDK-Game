@@ -1,739 +1,292 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Crash Playground (Mini BeamNG 2D)</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CrashDrive 3D (Prototype)</title>
   <style>
-    :root{
-      --bg:#0b0f16;
-      --panel:#101827;
-      --ink:#e8f0ff;
-      --muted:#9db0d8;
-      --good:#64ff9a;
-      --warn:#ffd166;
-      --bad:#ff4d4d;
-      --line:rgba(255,255,255,.12);
+    html,body{margin:0;height:100%;overflow:hidden;background:#0b0f16;font-family:Arial}
+    #ui{
+      position:fixed; left:12px; top:12px; z-index:10;
+      background:rgba(16,24,39,.78); color:#e8f0ff;
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:14px; padding:10px 12px; backdrop-filter: blur(10px);
+      min-width:240px;
     }
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      background: radial-gradient(1000px 600px at 50% 25%, #121d3a 0%, var(--bg) 55%, #060810 100%);
-      color:var(--ink);
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      overflow:hidden;
-    }
-    canvas{display:block; width:100vw; height:100vh}
-
-    /* UI */
-    .ui{
-      position:fixed; inset:0; pointer-events:none;
-      padding:14px;
-      display:flex; justify-content:space-between; align-items:flex-start;
-      gap:12px;
-    }
-    .panel{
-      pointer-events:auto;
-      background: linear-gradient(180deg, rgba(16,24,39,.85), rgba(10,14,22,.75));
-      border:1px solid var(--line);
-      border-radius:16px;
-      padding:12px 12px;
-      backdrop-filter: blur(10px);
-      box-shadow:0 20px 60px rgba(0,0,0,.45);
-      min-width: 240px;
-    }
-    .title{font-weight:900; letter-spacing:.2px}
-    .muted{color:var(--muted); font-size:12px; line-height:1.35}
-    .row{display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:13px; margin-top:8px}
-    .bar{
-      height:10px; border-radius:999px; background:rgba(255,255,255,.10);
-      overflow:hidden; margin-top:6px;
-    }
-    .fill{height:100%; width:100%; transform-origin:left; transform:scaleX(0.2);
-      background: linear-gradient(90deg, var(--good), var(--warn), var(--bad));
-    }
-    .btns{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+    #ui b{font-weight:900}
+    .row{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-top:6px}
+    .bar{height:10px;background:rgba(255,255,255,.12);border-radius:999px;overflow:hidden;margin-top:6px}
+    .fill{height:100%;width:100%;transform-origin:left;transform:scaleX(0);
+      background:linear-gradient(90deg,#64ff9a,#ffd166,#ff4d4d)}
+    .muted{opacity:.8;font-size:12px;line-height:1.35;margin-top:8px}
     button{
-      pointer-events:auto;
-      border:none; cursor:pointer;
-      border-radius:12px;
-      padding:10px 12px;
-      font-weight:800;
-      background: rgba(0,0,0,.35);
-      color:var(--ink);
+      margin-top:8px; width:100%;
+      border:none; cursor:pointer; border-radius:12px;
+      padding:10px 12px; font-weight:900;
+      background:rgba(0,0,0,.35); color:#e8f0ff;
       border:1px solid rgba(255,255,255,.14);
     }
-    button:hover{background:rgba(255,255,255,.06)}
     button:active{transform:translateY(1px)}
-    .danger{border-color: rgba(255,77,77,.35)}
-    .good{border-color: rgba(100,255,154,.25)}
-
-    /* Menu overlay */
-    .overlay{
-      position:fixed; inset:0;
-      display:flex; align-items:center; justify-content:center;
-      background: rgba(0,0,0,.66);
-      backdrop-filter: blur(10px);
-      padding:16px;
-    }
-    .card{
-      width:min(780px, 100%);
-      background: linear-gradient(180deg, rgba(18,26,46,.92), rgba(8,10,16,.92));
-      border:1px solid rgba(255,255,255,.14);
-      border-radius:20px;
-      box-shadow:0 30px 120px rgba(0,0,0,.75);
-      padding:16px;
-      display:grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap:14px;
-    }
-    .card h1{margin:0; font-size:22px; font-weight:950}
-    .card p{margin:8px 0 0; color:var(--muted); font-size:13px; line-height:1.4}
-    .box{
-      border:1px solid rgba(255,255,255,.12);
-      border-radius:16px;
-      padding:12px;
-      background: rgba(0,0,0,.25);
-    }
-    .cars{display:grid; gap:10px; margin-top:10px}
-    .carBtn{
-      display:flex; justify-content:space-between; align-items:center; gap:10px;
-      width:100%;
-      padding:12px;
-      border-radius:14px;
-      border:1px solid rgba(255,255,255,.14);
-      background: rgba(0,0,0,.28);
-      cursor:pointer;
-      color:var(--ink);
-      font-weight:900;
-    }
-    .carBtn small{display:block; color:var(--muted); font-weight:700; margin-top:2px}
-    .carBtn.active{border-color: rgba(100,255,154,.35); background: rgba(100,255,154,.06)}
-    .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px}
-    .pill{
-      display:inline-flex; gap:6px; align-items:center;
-      padding:6px 10px; border-radius:999px;
-      background: rgba(255,255,255,.06);
-      border:1px solid rgba(255,255,255,.10);
-      font-size:12px; color:var(--muted);
-    }
-    .kbd{
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      padding:2px 6px; border-radius:8px;
-      background: rgba(255,255,255,.10);
-      border:1px solid rgba(255,255,255,.12);
-      color:var(--ink);
-      font-weight:900;
-      font-size:12px;
-    }
-    @media (max-width: 860px){
-      .card{grid-template-columns:1fr}
-    }
+    #renderCanvas{width:100%;height:100%;touch-action:none}
   </style>
 </head>
 <body>
-  <canvas id="c"></canvas>
+  <canvas id="renderCanvas"></canvas>
 
-  <div class="ui" id="ui" style="display:none;">
-    <div class="panel">
-      <div class="title">Crash Playground</div>
-      <div class="muted" id="carName">Car: —</div>
-
-      <div class="row"><span>Speed</span><b id="spd">0</b></div>
-      <div class="row"><span>Damage</span><b id="dmg">0%</b></div>
-      <div class="bar"><div class="fill" id="dmgFill"></div></div>
-
-      <div class="row"><span>Gear</span><b id="gear">D</b></div>
-      <div class="row"><span>Drift</span><b id="drift">OFF</b></div>
-
-      <div class="btns">
-        <button class="good" id="resetBtn">Reset (R)</button>
-        <button id="menuBtn">Menu (Esc)</button>
-        <button class="danger" id="explodeBtn">Boom 💥</button>
-      </div>
-
-      <div class="muted" style="margin-top:10px">
-        <span class="pill"><span class="kbd">↑</span>/<span class="kbd">W</span> accélérer</span>
-        <span class="pill"><span class="kbd">↓</span>/<span class="kbd">S</span> freiner/reculer</span><br>
-        <span class="pill"><span class="kbd">←</span><span class="kbd">→</span> tourner</span>
-        <span class="pill"><span class="kbd">Space</span> drift</span>
-      </div>
-    </div>
-
-    <div class="panel" style="min-width:260px">
-      <div class="title">Map</div>
-      <div class="muted">Sandbox: murs, blocs, rampes (visuel). Fais des crash tests 😈</div>
-      <div class="row"><span>Checkpoint</span><b id="cp">1</b></div>
-      <div class="row"><span>Time</span><b id="time">0.0s</b></div>
-      <div class="muted" style="margin-top:8px">Astuce: si tu tapes fort → damage monte + voiture se “dégrade”.</div>
+  <div id="ui">
+    <div><b>CrashDrive 3D</b></div>
+    <div class="row"><span>Speed</span><b id="spd">0</b></div>
+    <div class="row"><span>Damage</span><b id="dmg">0%</b></div>
+    <div class="bar"><div class="fill" id="dmgFill"></div></div>
+    <button id="reset">Reset (R)</button>
+    <div class="muted">
+      Controls: <b>WASD</b> / arrows • <b>Space</b> handbrake • <b>R</b> reset<br>
+      Damage ↑ à chaque choc (déformation “fake”).
     </div>
   </div>
 
-  <div class="overlay" id="overlay">
-    <div class="card">
-      <div class="box">
-        <h1>Mini BeamNG 2D – Crash Playground</h1>
-        <p>
-          C’est une version “sandbox crash” simple (pas du vrai soft-body), mais c’est fun et propre.
-          Choisis ta voiture et lance-toi sur la map.
-        </p>
+  <!-- Babylon + physics -->
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/ammo.js"></script>
 
-        <div class="grid2">
-          <div class="pill">Objectif: <b style="color:var(--ink)">faire des crash tests</b></div>
-          <div class="pill">Bonus: <b style="color:var(--ink)">drift + boosts</b></div>
-        </div>
+  <script>
+    const canvas = document.getElementById("renderCanvas");
+    const engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer:true, stencil:true });
 
-        <div class="muted" style="margin-top:10px">
-          <span class="kbd">R</span> reset • <span class="kbd">Esc</span> menu • <span class="kbd">Space</span> drift
-        </div>
+    const spdEl = document.getElementById("spd");
+    const dmgEl = document.getElementById("dmg");
+    const dmgFill = document.getElementById("dmgFill");
+    const resetBtn = document.getElementById("reset");
 
-        <div class="btns" style="margin-top:12px">
-          <button class="good" id="startBtn">START</button>
-          <button id="qualityBtn">Graphics: HIGH</button>
-        </div>
-      </div>
+    let carBody, carMeshes = [], damage = 0;
+    let lastImpact = 0;
 
-      <div class="box">
-        <div class="title">Choose your car</div>
-        <div class="cars" id="cars"></div>
-        <div class="muted" style="margin-top:10px">
-          ✔ Vérif/amis/followers = projet “site + base de données”. Là on fait le jeu voiture.
-        </div>
-      </div>
-    </div>
-  </div>
+    const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 
-<script>
-(() => {
-  // ===== Canvas setup (HiDPI safe)
-  const canvas = document.getElementById("c");
-  const ctx = canvas.getContext("2d");
-  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-  function resize(){
-    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    canvas.width = Math.floor(innerWidth * DPR);
-    canvas.height = Math.floor(innerHeight * DPR);
-    canvas.style.width = innerWidth + "px";
-    canvas.style.height = innerHeight + "px";
-  }
-  window.addEventListener("resize", resize);
-  resize();
+    const keys = new Set();
+    window.addEventListener("keydown", (e)=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==="r") resetCar(); });
+    window.addEventListener("keyup", (e)=> keys.delete(e.key.toLowerCase()));
 
-  // ===== UI
-  const overlay = document.getElementById("overlay");
-  const ui = document.getElementById("ui");
-  const carsWrap = document.getElementById("cars");
-  const startBtn = document.getElementById("startBtn");
-  const qualityBtn = document.getElementById("qualityBtn");
-  const resetBtn = document.getElementById("resetBtn");
-  const menuBtn = document.getElementById("menuBtn");
-  const explodeBtn = document.getElementById("explodeBtn");
+    async function createScene(){
+      const scene = new BABYLON.Scene(engine);
+      scene.clearColor = new BABYLON.Color4(0.03,0.05,0.08,1);
 
-  const carNameEl = document.getElementById("carName");
-  const spdEl = document.getElementById("spd");
-  const dmgEl = document.getElementById("dmg");
-  const dmgFill = document.getElementById("dmgFill");
-  const gearEl = document.getElementById("gear");
-  const driftEl = document.getElementById("drift");
-  const cpEl = document.getElementById("cp");
-  const timeEl = document.getElementById("time");
+      // Camera
+      const camera = new BABYLON.FollowCamera("cam", new BABYLON.Vector3(0,6,-12), scene);
+      camera.radius = 14;
+      camera.heightOffset = 6;
+      camera.rotationOffset = 180;
+      camera.cameraAcceleration = 0.08;
+      camera.maxCameraSpeed = 6;
 
-  // ===== Cars
-  const CARS = [
-    { id:"street", name:"Street", desc:"balanced • medium grip", color:"#00e5ff", mass:1.0, engine:1.0, grip:1.0, max:1.0 },
-    { id:"drift",  name:"Drift",  desc:"low grip • easy slides", color:"#ffd166", mass:0.95, engine:0.95, grip:0.72, max:1.05 },
-    { id:"truck",  name:"Truck",  desc:"heavy • strong impacts", color:"#64ff9a", mass:1.35, engine:0.90, grip:0.92, max:0.90 },
-    { id:"rocket", name:"Rocket", desc:"fast • hard to control", color:"#ff4d4d", mass:0.92, engine:1.35, grip:0.85, max:1.35 },
-  ];
-  let selectedCar = CARS[0];
-  let highGraphics = true;
+      // Light
+      const hemi = new BABYLON.HemisphericLight("h", new BABYLON.Vector3(0,1,0), scene);
+      hemi.intensity = 0.85;
 
-  function renderCarButtons(){
-    carsWrap.innerHTML = "";
-    CARS.forEach(car => {
-      const btn = document.createElement("button");
-      btn.className = "carBtn" + (car.id === selectedCar.id ? " active" : "");
-      btn.innerHTML = `
-        <div>
-          ${car.name} <small>${car.desc}</small>
-        </div>
-        <div style="width:18px;height:18px;border-radius:6px;background:${car.color};border:1px solid rgba(255,255,255,.25)"></div>
-      `;
-      btn.onclick = () => {
-        selectedCar = car;
-        renderCarButtons();
-      };
-      carsWrap.appendChild(btn);
+      const dir = new BABYLON.DirectionalLight("d", new BABYLON.Vector3(-0.4,-1,0.3), scene);
+      dir.position = new BABYLON.Vector3(30,60,-30);
+      dir.intensity = 0.75;
+
+      // Physics
+      const ammo = await Ammo();
+      const plugin = new BABYLON.AmmoJSPlugin(true, ammo);
+      scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), plugin);
+
+      // Ground (big map)
+      const ground = BABYLON.MeshBuilder.CreateGround("ground", {width:300, height:300}, scene);
+      const gmat = new BABYLON.StandardMaterial("gmat", scene);
+      gmat.diffuseColor = new BABYLON.Color3(0.06,0.08,0.12);
+      gmat.specularColor = new BABYLON.Color3(0,0,0);
+      ground.material = gmat;
+      ground.receiveShadows = true;
+      ground.physicsImpostor = new BABYLON.PhysicsImpostor(ground, BABYLON.PhysicsImpostor.BoxImpostor,
+        { mass:0, restitution:0.05, friction:0.9 }, scene);
+
+      // Obstacles: walls + blocks + ramps
+      function wall(x,z,w,d,h=3){
+        const m = BABYLON.MeshBuilder.CreateBox("wall", {width:w, depth:d, height:h}, scene);
+        m.position.set(x, h/2, z);
+        const mat = new BABYLON.StandardMaterial("wmat", scene);
+        mat.diffuseColor = new BABYLON.Color3(0.7,0.2,0.22);
+        m.material = mat;
+        m.physicsImpostor = new BABYLON.PhysicsImpostor(m, BABYLON.PhysicsImpostor.BoxImpostor,
+          { mass:0, restitution:0.02, friction:0.8 }, scene);
+        return m;
+      }
+      function block(x,z,s=3){
+        const m = BABYLON.MeshBuilder.CreateBox("b", {size:s}, scene);
+        m.position.set(x, s/2, z);
+        const mat = new BABYLON.StandardMaterial("bmat", scene);
+        mat.diffuseColor = new BABYLON.Color3(0.55,0.18,0.18);
+        m.material = mat;
+        m.physicsImpostor = new BABYLON.PhysicsImpostor(m, BABYLON.PhysicsImpostor.BoxImpostor,
+          { mass:0, restitution:0.02, friction:0.85 }, scene);
+        return m;
+      }
+      function ramp(x,z,w=10,d=6,tilt=-18){
+        const m = BABYLON.MeshBuilder.CreateBox("r", {width:w, depth:d, height:1}, scene);
+        m.position.set(x, 0.5, z);
+        m.rotation.x = BABYLON.Tools.ToRadians(tilt);
+        const mat = new BABYLON.StandardMaterial("rmat", scene);
+        mat.diffuseColor = new BABYLON.Color3(0.20,0.28,0.55);
+        m.material = mat;
+        m.physicsImpostor = new BABYLON.PhysicsImpostor(m, BABYLON.PhysicsImpostor.BoxImpostor,
+          { mass:0, restitution:0.02, friction:0.9 }, scene);
+        return m;
+      }
+
+      // Outer boundaries
+      wall(0,-150,300,4,4); wall(0,150,300,4,4);
+      wall(-150,0,4,300,4); wall(150,0,4,300,4);
+
+      // Crash zone blocks
+      for(let i=0;i<18;i++){
+        block(-60 + (i%6)*10, -40 + Math.floor(i/6)*10, 3.2);
+      }
+
+      // Arena + ramps
+      wall(60,0,4,80,4); wall(100,0,4,80,4); wall(80,-40,44,4,4); wall(80,40,44,4,4);
+      ramp(10, 40, 14, 7, -20);
+      ramp(40, -20, 12, 6, -16);
+      ramp(90, 70, 16, 8, -22);
+
+      // Car (simple rigidbody + fake deformation)
+      const chassis = BABYLON.MeshBuilder.CreateBox("chassis", {width:2.2, height:0.7, depth:4.0}, scene);
+      chassis.position.set(0, 2, 0);
+
+      const cmat = new BABYLON.StandardMaterial("cmat", scene);
+      cmat.diffuseColor = new BABYLON.Color3(0.95,0.75,0.2);
+      cmat.specularColor = new BABYLON.Color3(0.1,0.1,0.1);
+      chassis.material = cmat;
+
+      // Wheels (visual)
+      const wheelMat = new BABYLON.StandardMaterial("wmat2", scene);
+      wheelMat.diffuseColor = new BABYLON.Color3(0.05,0.05,0.05);
+
+      function wheel(x,y,z){
+        const w = BABYLON.MeshBuilder.CreateCylinder("wheel", {diameter:0.8, height:0.35, tessellation:18}, scene);
+        w.rotation.z = Math.PI/2;
+        w.position.set(x,y,z);
+        w.material = wheelMat;
+        w.parent = chassis;
+        return w;
+      }
+      const w1 = wheel(-1.1, -0.45,  1.4);
+      const w2 = wheel( 1.1, -0.45,  1.4);
+      const w3 = wheel(-1.1, -0.45, -1.4);
+      const w4 = wheel( 1.1, -0.45, -1.4);
+
+      // Bumpers (deform targets)
+      const bumperF = BABYLON.MeshBuilder.CreateBox("bf", {width:2.0, height:0.4, depth:0.4}, scene);
+      bumperF.position.set(0, -0.1, 2.2);
+      bumperF.material = cmat;
+      bumperF.parent = chassis;
+
+      const bumperB = BABYLON.MeshBuilder.CreateBox("bb", {width:2.0, height:0.4, depth:0.4}, scene);
+      bumperB.position.set(0, -0.1, -2.2);
+      bumperB.material = cmat;
+      bumperB.parent = chassis;
+
+      // Physics impostor (rigid body)
+      chassis.physicsImpostor = new BABYLON.PhysicsImpostor(chassis, BABYLON.PhysicsImpostor.BoxImpostor,
+        { mass: 900, restitution:0.02, friction:0.9 }, scene);
+
+      carBody = chassis;
+      carMeshes = [chassis, bumperF, bumperB];
+
+      camera.lockedTarget = chassis;
+
+      // Impact -> damage
+      const obs = scene.onBeforeRenderObservable.add(() => {
+        if(!carBody || !carBody.physicsImpostor) return;
+
+        const v = carBody.physicsImpostor.getLinearVelocity();
+        const speed = v ? v.length() : 0;
+        spdEl.textContent = Math.round(speed * 3.6) + " km/h";
+
+        // Controls (simple forces)
+        const forward = carBody.forward; // direction
+        const up = keys.has("w") || keys.has("arrowup");
+        const down = keys.has("s") || keys.has("arrowdown");
+        const left = keys.has("a") || keys.has("arrowleft");
+        const right = keys.has("d") || keys.has("arrowright");
+        const hand = keys.has(" ");
+
+        const engineForce = hand ? 0 : 1400;
+        const brakeForce = 900;
+
+        if(up){
+          carBody.physicsImpostor.applyForce(forward.scale(engineForce), carBody.getAbsolutePosition());
+        }
+        if(down){
+          carBody.physicsImpostor.applyForce(forward.scale(-engineForce*0.75), carBody.getAbsolutePosition());
+        }
+
+        // steering: apply torque
+        const torque = 90 * (hand ? 0.65 : 1);
+        if(left) carBody.physicsImpostor.applyTorque(new BABYLON.Vector3(0, -torque, 0));
+        if(right) carBody.physicsImpostor.applyTorque(new BABYLON.Vector3(0, torque, 0));
+
+        // handbrake: damp velocity sideways a bit
+        if(hand && v){
+          carBody.physicsImpostor.setLinearVelocity(v.scale(0.985));
+        }
+
+        // Fake “damage look” based on impacts (detect sudden speed drops)
+        const now = performance.now();
+        if(now - lastImpact > 120){
+          // if speed is high and near ground, small chance to count bumps as impacts via angular vel
+          const av = carBody.physicsImpostor.getAngularVelocity();
+          const shake = av ? av.length() : 0;
+          if(speed > 12 && shake > 3.2){
+            lastImpact = now;
+            addDamage(speed * 1.2 + shake * 3);
+          }
+        }
+      });
+
+      function addDamage(amount){
+        damage = clamp(damage + amount * 0.06, 0, 100);
+        dmgEl.textContent = Math.round(damage) + "%";
+        dmgFill.style.transform = `scaleX(${damage/100})`;
+
+        // Visual deformation (fake): bumpers get squished + color darkens
+        const squash = 1 - (damage/220); // small
+        bumperF.scaling.z = clamp(squash, 0.65, 1);
+        bumperB.scaling.z = clamp(squash, 0.65, 1);
+
+        const tint = 1 - (damage/180);
+        carBody.material.diffuseColor = new BABYLON.Color3(0.95*tint, 0.75*tint, 0.2*tint);
+      }
+
+      // Reset
+      function resetCar(){
+        if(!carBody) return;
+        damage = 0;
+        dmgEl.textContent = "0%";
+        dmgFill.style.transform = "scaleX(0)";
+        bumperF.scaling.z = 1;
+        bumperB.scaling.z = 1;
+        carBody.material.diffuseColor = new BABYLON.Color3(0.95,0.75,0.2);
+
+        carBody.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0,0,0));
+        carBody.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0,0,0));
+        carBody.position.set(0, 2, 0);
+        carBody.rotationQuaternion = BABYLON.Quaternion.Identity();
+      }
+      window.resetCar = resetCar;
+      resetBtn.onclick = resetCar;
+
+      return scene;
+    }
+
+    let scene;
+    createScene().then(s => {
+      scene = s;
+      engine.runRenderLoop(() => scene.render());
     });
-  }
-  renderCarButtons();
 
-  // ===== World (large map)
-  const WORLD = { w: 5200, h: 3200 };
-
-  // Walls/obstacles are rectangles in world coords
-  const obstacles = [];
-  const ramps = []; // visual only (gives a speed boost if you go through)
-
-  function addRect(x,y,w,h,tag="wall"){
-    obstacles.push({x,y,w,h,tag});
-  }
-  function addRamp(x,y,w,h,angle=0){
-    ramps.push({x,y,w,h,angle});
-  }
-
-  // Build a simple playground map
-  function buildMap(){
-    obstacles.length = 0;
-    ramps.length = 0;
-
-    // Outer bounds (thick walls)
-    addRect(-200, -200, WORLD.w+400, 200, "bound");
-    addRect(-200, WORLD.h, WORLD.w+400, 200, "bound");
-    addRect(-200, 0, 200, WORLD.h, "bound");
-    addRect(WORLD.w, 0, 200, WORLD.h, "bound");
-
-    // Crash blocks area
-    for(let i=0;i<18;i++){
-      const x = 700 + (i%6)*220;
-      const y = 420 + Math.floor(i/6)*220;
-      addRect(x,y,120,120,"block");
-    }
-
-    // Long highway corridor
-    addRect(1800, 250, 30, 900, "wall");
-    addRect(2600, 250, 30, 900, "wall");
-    addRect(1800, 250, 830, 30, "wall");
-    addRect(1800, 1120, 830, 30, "wall");
-
-    // Slalom barriers
-    for(let i=0;i<9;i++){
-      addRect(1900 + (i%2)*420, 360 + i*80, 80, 20, "bar");
-    }
-
-    // Arena
-    addRect(3400, 500, 600, 30, "wall");
-    addRect(3400, 1100, 600, 30, "wall");
-    addRect(3400, 500, 30, 630, "wall");
-    addRect(3970, 500, 30, 630, "wall");
-    // arena obstacles
-    for(let i=0;i<10;i++){
-      addRect(3500 + Math.random()*380, 600 + Math.random()*420, 70, 70, "block");
-    }
-
-    // Ramps (boost zones)
-    addRamp(1200, 1500, 240, 90);
-    addRamp(2100, 1750, 260, 90);
-    addRamp(3800, 1400, 300, 100);
-
-    // Big “crash wall”
-    addRect(900, 2300, 1200, 40, "bigwall");
-    // Some pillars
-    for(let i=0;i<8;i++){
-      addRect(2500 + i*180, 2350, 60, 160, "pillar");
-    }
-  }
-  buildMap();
-
-  // Checkpoints (for fun UI)
-  const checkpoints = [
-    {x: 520, y: 420},
-    {x: 2200, y: 700},
-    {x: 3700, y: 820},
-    {x: 1400, y: 2350},
-  ];
-  let cpIndex = 0;
-
-  // ===== Car physics (simple but stable)
-  const car = {
-    x: 520, y: 520,
-    vx: 0, vy: 0,
-    ang: 0,  // radians
-    steer: 0,
-    r: 18,   // collision radius
-    damage: 0, // 0..100
-  };
-
-  let startedAt = 0;
-  let running = false;
-
-  const keys = new Set();
-  window.addEventListener("keydown", (e) => {
-    const k = e.key.toLowerCase();
-    if(["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"," ","escape","r"].includes(k)){
-      e.preventDefault();
-    }
-    keys.add(k);
-
-    if(k === "escape"){
-      openMenu();
-    }
-    if(k === "r"){
-      resetCar();
-    }
-  });
-  window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
-
-  function resetCar(){
-    car.x = 520; car.y = 520;
-    car.vx = 0; car.vy = 0;
-    car.ang = 0;
-    car.damage = Math.max(0, car.damage - 8); // small repair
-    cpIndex = 0;
-    startedAt = performance.now();
-  }
-
-  function openMenu(){
-    running = false;
-    overlay.style.display = "flex";
-    ui.style.display = "none";
-  }
-
-  function startGame(){
-    // apply car stats
-    car.r = 18 * (0.95 + selectedCar.mass*0.12);
-    car.damage = 0;
-    resetCar();
-    carNameEl.textContent = `Car: ${selectedCar.name}`;
-    overlay.style.display = "none";
-    ui.style.display = "flex";
-    running = true;
-  }
-
-  startBtn.onclick = startGame;
-  qualityBtn.onclick = () => {
-    highGraphics = !highGraphics;
-    qualityBtn.textContent = "Graphics: " + (highGraphics ? "HIGH" : "LOW");
-  };
-  resetBtn.onclick = resetCar;
-  menuBtn.onclick = openMenu;
-
-  // “Boom” button (just for fun)
-  explodeBtn.onclick = () => {
-    car.vx += (Math.random()*2-1)*22;
-    car.vy += (Math.random()*2-1)*22;
-    car.damage = Math.min(100, car.damage + 12);
-  };
-
-  // ===== Math helpers
-  const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
-  const len = (x,y)=>Math.hypot(x,y);
-  const dot = (ax,ay,bx,by)=>ax*bx+ay*by;
-
-  // Circle vs AABB collision
-  function collideCircleRect(cx,cy,cr, rx,ry,rw,rh){
-    const nx = clamp(cx, rx, rx+rw);
-    const ny = clamp(cy, ry, ry+rh);
-    const dx = cx - nx;
-    const dy = cy - ny;
-    const d2 = dx*dx + dy*dy;
-    if(d2 > cr*cr) return null;
-    const d = Math.sqrt(d2) || 0.0001;
-    return { nx, ny, dx, dy, d };
-  }
-
-  // ===== Update
-  function update(dt){
-    // controls
-    const up = keys.has("arrowup") || keys.has("w");
-    const down = keys.has("arrowdown") || keys.has("s");
-    const left = keys.has("arrowleft") || keys.has("a");
-    const right = keys.has("arrowright") || keys.has("d");
-    const drift = keys.has(" ");
-
-    // Stats from selected car + damage reduces control
-    const dmgFactor = 1 - (car.damage/140); // at 100 damage -> ~0.28
-    const engine = 22 * selectedCar.engine * dmgFactor;
-    const maxSpeed = 38 * selectedCar.max * dmgFactor;
-    const grip = selectedCar.grip * (drift ? 0.45 : 1.0) * (0.55 + dmgFactor*0.65);
-    const turnRate = 2.8 * (0.6 + selectedCar.grip*0.5) * (0.6 + dmgFactor*0.6);
-
-    // forward vector from angle
-    const fx = Math.cos(car.ang);
-    const fy = Math.sin(car.ang);
-
-    // steering
-    let steer = 0;
-    if(left) steer -= 1;
-    if(right) steer += 1;
-
-    // speed along forward
-    const fwdSpeed = dot(car.vx, car.vy, fx, fy);
-
-    // turning stronger when moving
-    const turnStrength = turnRate * clamp(Math.abs(fwdSpeed)/18, 0.25, 1.0);
-    car.ang += steer * turnStrength * dt * (fwdSpeed >= 0 ? 1 : -1);
-
-    // acceleration/brake
-    if(up){
-      car.vx += fx * engine * dt;
-      car.vy += fy * engine * dt;
-    } else if(down){
-      // brake / reverse
-      car.vx -= fx * engine * 0.85 * dt;
-      car.vy -= fy * engine * 0.85 * dt;
-    }
-
-    // lateral friction (grip): damp sideways velocity
-    // decompose velocity into forward + sideways
-    const sx = -fy, sy = fx;
-    const sideSpeed = dot(car.vx, car.vy, sx, sy);
-
-    // reduce side speed
-    const sideDamp = clamp(grip * 10 * dt, 0, 0.75);
-    car.vx -= sx * sideSpeed * sideDamp;
-    car.vy -= sy * sideSpeed * sideDamp;
-
-    // rolling resistance
-    car.vx *= (1 - clamp(0.80*dt, 0, 0.06));
-    car.vy *= (1 - clamp(0.80*dt, 0, 0.06));
-
-    // cap speed
-    const sp = len(car.vx, car.vy);
-    if(sp > maxSpeed){
-      const s = maxSpeed / sp;
-      car.vx *= s;
-      car.vy *= s;
-    }
-
-    // move
-    car.x += car.vx * dt * 60; // scaled for feel
-    car.y += car.vy * dt * 60;
-
-    // collisions with obstacles
-    for(const o of obstacles){
-      const hit = collideCircleRect(car.x, car.y, car.r, o.x, o.y, o.w, o.h);
-      if(!hit) continue;
-
-      // normal from rect -> circle
-      const nx = hit.dx / hit.d;
-      const ny = hit.dy / hit.d;
-
-      // push out
-      const overlap = car.r - hit.d;
-      car.x += nx * overlap;
-      car.y += ny * overlap;
-
-      // bounce / reflect velocity along normal
-      const vn = dot(car.vx, car.vy, nx, ny);
-      if(vn < 0){
-        // impact strength
-        const impact = Math.abs(vn) * 18; // tuning
-        // reflect with restitution (less bounce when damaged)
-        const restitution = 0.35 + (1 - car.damage/120)*0.25;
-        car.vx -= (1 + restitution) * vn * nx;
-        car.vy -= (1 + restitution) * vn * ny;
-
-        // add damage based on impact and car mass
-        const dmgAdd = impact * (0.014 + selectedCar.mass*0.006);
-        car.damage = clamp(car.damage + dmgAdd, 0, 100);
-      }
-    }
-
-    // ramps (boost zones)
-    for(const r of ramps){
-      const inside = (car.x > r.x && car.x < r.x+r.w && car.y > r.y && car.y < r.y+r.h);
-      if(inside){
-        // boost forward slightly
-        car.vx += fx * 10 * dt;
-        car.vy += fy * 10 * dt;
-        // small "shake" via damage min? no
-      }
-    }
-
-    // checkpoints
-    const cp = checkpoints[cpIndex];
-    if(cp){
-      if(len(car.x - cp.x, car.y - cp.y) < 120){
-        cpIndex = (cpIndex + 1) % checkpoints.length;
-      }
-    }
-  }
-
-  // ===== Render
-  function draw(){
-    const w = canvas.width, h = canvas.height;
-    ctx.setTransform(1,0,0,1,0,0);
-    ctx.clearRect(0,0,w,h);
-
-    // Camera follows car
-    const camX = car.x - (innerWidth/2);
-    const camY = car.y - (innerHeight/2);
-
-    // Apply DPR + camera
-    ctx.setTransform(DPR,0,0,DPR, -camX*DPR, -camY*DPR);
-
-    // Background grid
-    const grid = 120;
-    ctx.fillStyle = "#0c1220";
-    ctx.fillRect(0,0,WORLD.w,WORLD.h);
-
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = "rgba(255,255,255,.08)";
-    ctx.lineWidth = 1;
-    for(let x=0; x<=WORLD.w; x+=grid){
-      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,WORLD.h); ctx.stroke();
-    }
-    for(let y=0; y<=WORLD.h; y+=grid){
-      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(WORLD.w,y); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
-    // Ramps
-    for(const r of ramps){
-      ctx.save();
-      ctx.translate(r.x + r.w/2, r.y + r.h/2);
-      ctx.rotate(r.angle);
-      ctx.translate(-r.w/2, -r.h/2);
-      ctx.fillStyle = "rgba(120,160,255,.12)";
-      ctx.fillRect(0,0,r.w,r.h);
-      ctx.strokeStyle = "rgba(120,160,255,.35)";
-      ctx.strokeRect(0,0,r.w,r.h);
-      if(highGraphics){
-        ctx.globalAlpha = 0.6;
-        ctx.fillStyle = "rgba(255,255,255,.10)";
-        for(let i=0;i<10;i++){
-          ctx.fillRect(i*(r.w/10), 0, 6, r.h);
-        }
-        ctx.globalAlpha = 1;
-      }
-      ctx.restore();
-    }
-
-    // Obstacles
-    for(const o of obstacles){
-      let col = "rgba(255,77,77,.75)";
-      if(o.tag === "block") col = "rgba(255,77,77,.65)";
-      if(o.tag === "bar") col = "rgba(255,200,90,.55)";
-      if(o.tag === "pillar") col = "rgba(255,77,77,.55)";
-      if(o.tag === "bigwall") col = "rgba(255,77,77,.85)";
-      if(o.tag === "bound") col = "rgba(255,255,255,.08)";
-
-      ctx.fillStyle = col;
-      ctx.fillRect(o.x, o.y, o.w, o.h);
-
-      if(highGraphics){
-        ctx.strokeStyle = "rgba(0,0,0,.35)";
-        ctx.strokeRect(o.x, o.y, o.w, o.h);
-      }
-    }
-
-    // Checkpoint markers
-    for(let i=0;i<checkpoints.length;i++){
-      const p = checkpoints[i];
-      const active = (i === cpIndex);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, active ? 16 : 10, 0, Math.PI*2);
-      ctx.fillStyle = active ? "rgba(100,255,154,.85)" : "rgba(157,176,216,.35)";
-      ctx.fill();
-      if(highGraphics){
-        ctx.strokeStyle = "rgba(255,255,255,.2)";
-        ctx.stroke();
-      }
-    }
-
-    // Car
-    ctx.save();
-    ctx.translate(car.x, car.y);
-    ctx.rotate(car.ang);
-
-    // “Damage” visual: cracks + darker
-    const dmg = car.damage/100;
-    const base = selectedCar.color;
-    ctx.fillStyle = base;
-    // car body
-    const bw = 46, bh = 26;
-    ctx.beginPath();
-    ctx.roundRect(-bw/2, -bh/2, bw, bh, 8);
-    ctx.fill();
-
-    // windshield
-    ctx.globalAlpha = 0.22 + (1-dmg)*0.2;
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.roundRect(-10, -8, 20, 16, 6);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // wheels
-    ctx.fillStyle = "rgba(0,0,0,.55)";
-    ctx.fillRect(-bw/2+2, -bh/2-4, 12, 6);
-    ctx.fillRect(bw/2-14, -bh/2-4, 12, 6);
-    ctx.fillRect(-bw/2+2, bh/2-2, 12, 6);
-    ctx.fillRect(bw/2-14, bh/2-2, 12, 6);
-
-    // damage overlay
-    if(dmg > 0.02){
-      ctx.globalAlpha = 0.20 + dmg*0.55;
-      ctx.fillStyle = "rgba(0,0,0,.55)";
-      ctx.beginPath();
-      ctx.roundRect(-bw/2, -bh/2, bw, bh, 8);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-
-      if(highGraphics){
-        ctx.strokeStyle = "rgba(255,255,255,.18)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(-16, -4); ctx.lineTo(0, 0); ctx.lineTo(16, 6);
-        ctx.stroke();
-      }
-    }
-
-    // direction arrow
-    ctx.fillStyle = "rgba(255,255,255,.25)";
-    ctx.beginPath();
-    ctx.moveTo(18,0); ctx.lineTo(10,-6); ctx.lineTo(10,6);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-
-    // Particles (simple skid)
-    if(highGraphics && running){
-      const sp = Math.hypot(car.vx, car.vy);
-      const drifting = keys.has(" ") && sp > 8;
-      if(drifting){
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = "rgba(255,255,255,.22)";
-        for(let i=0;i<2;i++){
-          const px = car.x + (Math.random()*18-9);
-          const py = car.y + (Math.random()*18-9);
-          ctx.fillRect(px, py, 8, 2);
-        }
-        ctx.globalAlpha = 1;
-      }
-    }
-  }
-
-  // ===== Main loop
-  let last = performance.now();
-  function loop(now){
-    const dt = clamp((now - last) / 1000, 0, 0.05);
-    last = now;
-
-    if(running){
-      update(dt);
-      // UI update
-      const speed = Math.hypot(car.vx, car.vy);
-      spdEl.textContent = Math.round(speed*3.2) + " km/h";
-      dmgEl.textContent = Math.round(car.damage) + "%";
-      dmgFill.style.transform = `scaleX(${car.damage/100})`;
-      driftEl.textContent = (keys.has(" ") ? "ON" : "OFF");
-      gearEl.textContent = (keys.has("arrowdown")||keys.has("s")) ? "R" : "D";
-      cpEl.textContent = String(cpIndex+1);
-      timeEl.textContent = (((performance.now()-startedAt)/1000).toFixed(1)) + "s";
-    }
-
-    draw();
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
-
-  // start in menu
-  openMenu();
-
-})();
-</script>
+    window.addEventListener("resize", () => engine.resize());
+  </script>
 </body>
 </html>
