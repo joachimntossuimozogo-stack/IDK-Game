@@ -1,754 +1,116 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Night Watch</title>
-  <style>
-    :root{
-      --bg:#07090e;
-      --panel:#0e1320;
-      --ink:#d7e1ff;
-      --muted:#7f93c9;
-      --danger:#ff3b3b;
-      --ok:#66ff99;
-      --warn:#ffd166;
-    }
+<title>Dodge Game</title>
 
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      background: radial-gradient(1200px 600px at 50% 20%, #0b1030 0%, var(--bg) 60%, #02030a 100%);
-      color:var(--ink);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      min-height:100vh;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding:16px;
-    }
+<style>
 
-    .wrap{
-      width:min(980px, 100%);
-      display:grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap:14px;
-    }
+body{
+background:#111;
+color:white;
+text-align:center;
+font-family:Arial;
+}
 
-    .screen{
-      position:relative;
-      border-radius:18px;
-      overflow:hidden;
-      background: linear-gradient(180deg, #0a0f1f 0%, #050713 100%);
-      box-shadow: 0 20px 60px rgba(0,0,0,.55);
-      border:1px solid rgba(255,255,255,.06);
-      min-height:520px;
-    }
+canvas{
+background:#222;
+margin-top:20px;
+}
 
-    .topbar{
-      display:flex;
-      justify-content:space-between;
-      gap:10px;
-      padding:12px 14px;
-      background: rgba(255,255,255,.03);
-      border-bottom:1px solid rgba(255,255,255,.06);
-      font-size:13px;
-      color:var(--muted);
-    }
+</style>
 
-    .topbar b{color:var(--ink); font-weight:700}
-
-    .view{
-      position:absolute;
-      inset:46px 0 0 0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      padding:18px;
-    }
-
-    /* “Cam view” */
-    .cam{
-      width:100%;
-      height:100%;
-      border-radius:14px;
-      background:
-        radial-gradient(900px 500px at 50% 40%, rgba(120,160,255,.12) 0%, rgba(0,0,0,0) 60%),
-        repeating-linear-gradient(0deg, rgba(255,255,255,.03), rgba(255,255,255,.03) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 4px);
-      border:1px solid rgba(255,255,255,.06);
-      position:relative;
-      overflow:hidden;
-    }
-
-    .grain{
-      position:absolute;
-      inset:-40px;
-      background-image:
-        radial-gradient(circle at 30% 20%, rgba(255,255,255,.06) 0 1px, transparent 2px),
-        radial-gradient(circle at 70% 60%, rgba(255,255,255,.05) 0 1px, transparent 2px),
-        radial-gradient(circle at 40% 80%, rgba(255,255,255,.04) 0 1px, transparent 2px);
-      filter: blur(.2px);
-      opacity:.65;
-      animation: drift 2.6s linear infinite;
-      pointer-events:none;
-    }
-    @keyframes drift{
-      0%{transform:translate(0,0)}
-      50%{transform:translate(-12px, 6px)}
-      100%{transform:translate(0,0)}
-    }
-
-    .hud{
-      position:absolute;
-      left:14px;
-      bottom:14px;
-      display:flex;
-      gap:10px;
-      align-items:flex-end;
-    }
-
-    .tag{
-      background: rgba(0,0,0,.45);
-      border:1px solid rgba(255,255,255,.08);
-      padding:8px 10px;
-      border-radius:12px;
-      font-size:12px;
-      color:var(--muted);
-      backdrop-filter: blur(6px);
-    }
-    .tag b{color:var(--ink)}
-
-    .meters{
-      position:absolute;
-      right:14px;
-      bottom:14px;
-      display:flex;
-      gap:10px;
-      align-items:flex-end;
-    }
-
-    .meter{
-      width:120px;
-      background: rgba(0,0,0,.45);
-      border:1px solid rgba(255,255,255,.08);
-      border-radius:12px;
-      padding:8px 10px;
-      font-size:12px;
-      color:var(--muted);
-      backdrop-filter: blur(6px);
-    }
-    .bar{
-      height:8px;
-      border-radius:999px;
-      background: rgba(255,255,255,.08);
-      overflow:hidden;
-      margin-top:6px;
-    }
-    .fill{
-      height:100%;
-      width:100%;
-      background: linear-gradient(90deg, var(--ok), var(--warn), var(--danger));
-      transform-origin:left center;
-      transform:scaleX(1);
-    }
-
-    /* Monster approach indicators */
-    .hall{
-      position:absolute;
-      inset:0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      pointer-events:none;
-    }
-    .hall .shape{
-      width:240px;
-      height:260px;
-      border-radius:18px;
-      background: radial-gradient(140px 160px at 50% 38%, rgba(255,255,255,.08) 0%, rgba(0,0,0,0) 70%);
-      border:1px dashed rgba(255,255,255,.09);
-      opacity:.35;
-      transform:scale(.9);
-      transition: opacity .2s, transform .2s;
-    }
-    .threat-1 .shape{opacity:.22; transform:scale(.86)}
-    .threat-2 .shape{opacity:.32; transform:scale(.92)}
-    .threat-3 .shape{opacity:.46; transform:scale(1.02)}
-    .threat-4 .shape{opacity:.62; transform:scale(1.12)}
-    .threat-5 .shape{opacity:.9; transform:scale(1.22); border-style:solid}
-
-    /* Light overlay */
-    .flash{
-      position:absolute;
-      inset:0;
-      background: radial-gradient(600px 380px at 50% 55%, rgba(255,255,255,.16) 0%, rgba(255,255,255,.08) 30%, rgba(0,0,0,0) 70%);
-      opacity:0;
-      transition: opacity .08s linear;
-      pointer-events:none;
-    }
-    .lightOn .flash{opacity:1}
-
-    /* Door overlay */
-    .door{
-      position:absolute;
-      inset:0;
-      background:
-        linear-gradient(90deg, rgba(0,0,0,0) 0 32%, rgba(0,0,0,.55) 32% 68%, rgba(0,0,0,0) 68% 100%),
-        repeating-linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.06) 2px, rgba(0,0,0,0) 4px, rgba(0,0,0,0) 9px);
-      opacity:0;
-      transition: opacity .12s ease;
-      pointer-events:none;
-    }
-    .doorOn .door{opacity:1}
-
-    /* Glitch */
-    .glitch{
-      position:absolute;
-      inset:0;
-      pointer-events:none;
-      opacity:0;
-      background:
-        linear-gradient(0deg, rgba(255,0,90,.12), rgba(0,180,255,.10)),
-        repeating-linear-gradient(0deg, rgba(255,255,255,.04), rgba(255,255,255,.04) 1px, rgba(0,0,0,0) 2px, rgba(0,0,0,0) 5px);
-      mix-blend-mode: screen;
-    }
-    .glitchOn .glitch{opacity:1; animation: glitch 180ms steps(2) infinite}
-    @keyframes glitch{
-      0%{transform:translate(0,0)}
-      25%{transform:translate(8px,-3px)}
-      50%{transform:translate(-10px,4px)}
-      75%{transform:translate(6px,2px)}
-      100%{transform:translate(0,0)}
-    }
-
-    /* Right panel */
-    .panel{
-      border-radius:18px;
-      background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
-      border:1px solid rgba(255,255,255,.06);
-      box-shadow: 0 20px 60px rgba(0,0,0,.45);
-      overflow:hidden;
-      min-height:520px;
-      display:flex;
-      flex-direction:column;
-    }
-
-    .panel header{
-      padding:14px 14px 10px;
-      border-bottom:1px solid rgba(255,255,255,.06);
-      display:flex;
-      align-items:flex-start;
-      justify-content:space-between;
-      gap:10px;
-    }
-    .panel header .title{
-      font-size:16px;
-      font-weight:800;
-      letter-spacing:.4px;
-    }
-    .panel header .sub{
-      margin-top:4px;
-      font-size:12px;
-      color:var(--muted);
-      line-height:1.35;
-    }
-
-    .btns{
-      padding:14px;
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:10px;
-    }
-
-    button{
-      appearance:none;
-      border:none;
-      border-radius:14px;
-      padding:14px 12px;
-      font-weight:800;
-      letter-spacing:.5px;
-      cursor:pointer;
-      background: rgba(0,0,0,.35);
-      color:var(--ink);
-      border:1px solid rgba(255,255,255,.10);
-      transition: transform .06s ease, background .12s ease, border-color .12s ease;
-      user-select:none;
-    }
-    button:active{transform: translateY(1px) scale(.99)}
-    button:hover{background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.16)}
-    .danger{border-color: rgba(255,59,59,.35)}
-    .good{border-color: rgba(102,255,153,.28)}
-
-    .stats{
-      padding:14px;
-      display:flex;
-      flex-direction:column;
-      gap:10px;
-      border-top:1px solid rgba(255,255,255,.06);
-      margin-top:auto;
-    }
-    .row{
-      display:flex;
-      justify-content:space-between;
-      color:var(--muted);
-      font-size:12px;
-    }
-    .row b{color:var(--ink)}
-    .row .bad{color: var(--danger); font-weight:800}
-    .row .ok{color: var(--ok); font-weight:800}
-
-    .overlay{
-      position:fixed;
-      inset:0;
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      background: rgba(0,0,0,.68);
-      backdrop-filter: blur(8px);
-      padding:16px;
-    }
-    .card{
-      width:min(640px, 100%);
-      border-radius:18px;
-      background: linear-gradient(180deg, rgba(20,26,45,.92), rgba(10,12,22,.92));
-      border:1px solid rgba(255,255,255,.08);
-      box-shadow:0 30px 120px rgba(0,0,0,.75);
-      padding:16px;
-    }
-    .card h1{margin:0 0 8px 0; font-size:22px}
-    .card p{margin:0 0 14px 0; color:var(--muted); line-height:1.45}
-    .grid{
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:10px;
-    }
-    .small{
-      font-size:12px;
-      color:var(--muted);
-      margin-top:10px;
-    }
-
-    @media (max-width: 860px){
-      .wrap{grid-template-columns:1fr}
-      .panel{min-height:auto}
-      .screen{min-height:520px}
-    }
-  </style>
 </head>
+
 <body>
-  <div class="wrap">
-    <div class="screen" id="screen">
-      <div class="topbar">
-        <div>Cam: <b id="camName">OFFICE</b></div>
-        <div>Night <b id="night">1</b> • <span id="time">12:00 AM</span></div>
-      </div>
 
-      <div class="view">
-        <div class="cam" id="cam">
-          <div class="grain"></div>
-          <div class="hall" id="hall"><div class="shape"></div></div>
-          <div class="flash"></div>
-          <div class="door"></div>
-          <div class="glitch"></div>
+<h1>Dodge Game</h1>
+<h2>Score : <span id="score">0</span></h2>
 
-          <div class="hud">
-            <div class="tag">Status: <b id="status">READY</b></div>
-            <div class="tag">Tip: <b>Garde un œil sur la batterie</b></div>
-          </div>
-
-          <div class="meters">
-            <div class="meter">
-              Power: <b id="powerTxt">100%</b>
-              <div class="bar"><div class="fill" id="powerFill"></div></div>
-            </div>
-            <div class="meter">
-              Threat: <b id="threatTxt">0</b>
-              <div class="bar"><div class="fill" id="threatFill"></div></div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-
-    <div class="panel">
-      <header>
-        <div>
-          <div class="title">CONTROL PANEL</div>
-          <div class="sub">Survis jusqu’à <b>6:00 AM</b>. Utilise Light & Door… mais ça bouffe la batterie.</div>
-        </div>
-        <div class="sub" style="text-align:right">
-          Keys:<br><b>L</b> = Light<br><b>D</b> = Door
-        </div>
-      </header>
-
-      <div class="btns">
-        <button class="good" id="lightBtn">LIGHT (L)</button>
-        <button class="danger" id="doorBtn">DOOR (D)</button>
-        <button id="resetBtn">RESTART</button>
-        <button id="muteBtn">SFX: ON</button>
-      </div>
-
-      <div class="stats">
-        <div class="row"><span>Light</span> <b id="lightState">OFF</b></div>
-        <div class="row"><span>Door</span> <b id="doorState">OPEN</b></div>
-        <div class="row"><span>Battery Drain</span> <b id="drainTxt">Low</b></div>
-        <div class="row"><span>Danger</span> <b id="dangerTxt" class="ok">Safe</b></div>
-      </div>
-    </div>
-  </div>
-
-  <div class="overlay" id="overlay">
-    <div class="card">
-      <h1>Night Watch</h1>
-      <p>Un truc rôde dans le couloir. Tu n’as que <b>Light</b> et <b>Door</b>.  
-        Si il arrive et que la porte est ouverte… c’est fini.</p>
-      <div class="grid">
-        <button class="good" id="startBtn">START</button>
-        <button id="howBtn">HOW TO PLAY</button>
-      </div>
-      <div class="small" id="howText" style="display:none">
-        - Survis jusqu’à 6:00 AM (environ 2 minutes)<br>
-        - Light montre le couloir mais consomme la batterie<br>
-        - Door protège mais consomme un peu en continu<br>
-        - Le niveau “Threat” monte… et parfois ça glitch 😈
-      </div>
-    </div>
-  </div>
+<canvas id="game" width="400" height="500"></canvas>
 
 <script>
-(() => {
-  // --- Elements
-  const screen = document.getElementById("screen");
-  const hall = document.getElementById("hall");
-  const statusEl = document.getElementById("status");
-  const timeEl = document.getElementById("time");
-  const nightEl = document.getElementById("night");
-  const powerTxt = document.getElementById("powerTxt");
-  const powerFill = document.getElementById("powerFill");
-  const threatTxt = document.getElementById("threatTxt");
-  const threatFill = document.getElementById("threatFill");
-  const lightBtn = document.getElementById("lightBtn");
-  const doorBtn = document.getElementById("doorBtn");
-  const resetBtn = document.getElementById("resetBtn");
-  const muteBtn = document.getElementById("muteBtn");
-  const lightState = document.getElementById("lightState");
-  const doorState = document.getElementById("doorState");
-  const drainTxt = document.getElementById("drainTxt");
-  const dangerTxt = document.getElementById("dangerTxt");
 
-  const overlay = document.getElementById("overlay");
-  const startBtn = document.getElementById("startBtn");
-  const howBtn = document.getElementById("howBtn");
-  const howText = document.getElementById("howText");
+const canvas = document.getElementById("game")
+const ctx = canvas.getContext("2d")
 
-  // --- Game state
-  let running = false;
-  let lightOn = false;
-  let doorOn = false;
-  let muted = false;
+let player = {
+x:180,
+y:450,
+w:40,
+h:40
+}
 
-  let power = 100;           // 0..100
-  let threat = 0;            // 0..5
-  let seconds = 0;           // time counter
-  const NIGHT_SECONDS = 120; // ~2 minutes to win
+let blocks = []
+let score = 0
+let speed = 3
 
-  // AI
-  let approach = 0;          // 0..100 (hidden)
-  let lastBump = 0;
+document.addEventListener("keydown", e => {
 
-  // --- Tiny SFX (WebAudio)
-  const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  let ctx = null;
+if(e.key == "ArrowLeft"){
+player.x -= 20
+}
 
-  function beep(freq=220, dur=0.06, type="square", vol=0.05){
-    if(muted) return;
-    if(!ctx) ctx = new AudioCtx();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = type;
-    o.frequency.value = freq;
-    g.gain.value = vol;
-    o.connect(g); g.connect(ctx.destination);
-    o.start();
-    o.stop(ctx.currentTime + dur);
-  }
+if(e.key == "ArrowRight"){
+player.x += 20
+}
 
-  function noise(dur=0.12, vol=0.05){
-    if(muted) return;
-    if(!ctx) ctx = new AudioCtx();
-    const bufferSize = Math.floor(ctx.sampleRate * dur);
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for(let i=0;i<bufferSize;i++){
-      data[i] = (Math.random()*2-1) * 0.7;
-    }
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
-    const g = ctx.createGain();
-    g.gain.value = vol;
-    src.connect(g); g.connect(ctx.destination);
-    src.start();
-  }
+})
 
-  // --- UI helpers
-  function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+function spawnBlock(){
 
-  function setStatus(t){
-    statusEl.textContent = t;
-  }
+blocks.push({
+x:Math.random()*360,
+y:-20,
+w:40,
+h:40
+})
 
-  function setTimeUI(){
-    const t = Math.floor((seconds / NIGHT_SECONDS) * 6); // 0..6
-    const hour = 12 + t;
-    if(hour === 12) timeEl.textContent = "12:00 AM";
-    else if(hour < 18) timeEl.textContent = (hour-12) + ":00 AM";
-    else timeEl.textContent = "6:00 AM";
-  }
+}
 
-  function setThreatUI(){
-    threatTxt.textContent = String(threat);
-    threatFill.style.transform = `scaleX(${threat/5})`;
-    hall.className = "hall " + (threat ? `threat-${threat}` : "");
-    dangerTxt.textContent = threat >= 4 ? "DANGER" : (threat >= 2 ? "Watch" : "Safe");
-    dangerTxt.className = threat >= 4 ? "bad" : "ok";
-  }
+setInterval(spawnBlock,1000)
 
-  function setPowerUI(){
-    power = clamp(power, 0, 100);
-    powerTxt.textContent = `${Math.ceil(power)}%`;
-    powerFill.style.transform = `scaleX(${power/100})`;
+function gameLoop(){
 
-    // Drain label
-    const drain = baseDrain();
-    drainTxt.textContent = drain <= 0.09 ? "Low" : drain <= 0.16 ? "Medium" : "High";
-  }
+ctx.clearRect(0,0,400,500)
 
-  function baseDrain(){
-    // base drain per tick (tick=200ms)
-    let d = 0.06;
-    if(lightOn) d += 0.12;
-    if(doorOn) d += 0.10;
-    // more danger = more drain (panic!)
-    d += threat * 0.02;
-    return d;
-  }
+ctx.fillStyle="cyan"
+ctx.fillRect(player.x,player.y,player.w,player.h)
 
-  function applyClasses(){
-    screen.classList.toggle("lightOn", lightOn);
-    screen.classList.toggle("doorOn", doorOn);
-  }
+ctx.fillStyle="red"
 
-  function setButtons(){
-    lightState.textContent = lightOn ? "ON" : "OFF";
-    doorState.textContent = doorOn ? "CLOSED" : "OPEN";
-    lightBtn.textContent = lightOn ? "LIGHT (L) • ON" : "LIGHT (L)";
-    doorBtn.textContent = doorOn ? "DOOR (D) • CLOSED" : "DOOR (D)";
-  }
+for(let i=0;i<blocks.length;i++){
 
-  function glitchPulse(){
-    screen.classList.add("glitchOn");
-    noise(0.09, 0.05);
-    setTimeout(() => screen.classList.remove("glitchOn"), 220 + Math.random()*220);
-  }
+let b = blocks[i]
 
-  // --- Actions
-  function toggleLight(){
-    if(!running) return;
-    lightOn = !lightOn;
-    beep(lightOn ? 680 : 420, 0.05, "square", 0.04);
-    applyClasses();
-    setButtons();
-  }
+b.y += speed
 
-  function toggleDoor(){
-    if(!running) return;
-    doorOn = !doorOn;
-    beep(doorOn ? 180 : 240, 0.07, "sawtooth", 0.045);
-    applyClasses();
-    setButtons();
-  }
+ctx.fillRect(b.x,b.y,b.w,b.h)
 
-  // --- Game loop
-  let loopId = null;
+if(
+player.x < b.x + b.w &&
+player.x + player.w > b.x &&
+player.y < b.y + b.h &&
+player.y + player.h > b.y
+){
+alert("Game Over ! Score : "+score)
+location.reload()
+}
 
-  function reset(){
-    running = false;
-    lightOn = false;
-    doorOn = false;
-    power = 100;
-    threat = 0;
-    approach = 0;
-    seconds = 0;
-    lastBump = 0;
+if(b.y > 500){
+score++
+document.getElementById("score").innerText = score
+blocks.splice(i,1)
+}
 
-    clearInterval(loopId);
-    loopId = null;
+}
 
-    applyClasses();
-    setButtons();
-    setPowerUI();
-    setThreatUI();
-    setTimeUI();
-    setStatus("READY");
-  }
+requestAnimationFrame(gameLoop)
 
-  function lose(){
-    running = false;
-    clearInterval(loopId);
-    loopId = null;
+}
 
-    // jumpscare-ish overlay
-    glitchPulse();
-    for(let i=0;i<5;i++){
-      setTimeout(() => beep(90 + i*40, 0.05, "square", 0.06), i*60);
-    }
-    setStatus("WASTED ☠");
-    overlay.style.display = "flex";
-    overlay.querySelector("h1").textContent = "YOU DIED";
-    overlay.querySelector("p").innerHTML = "Il était dans le couloir… et la porte était <b>ouverte</b>.";
-    startBtn.textContent = "RETRY";
-    howText.style.display = "none";
-  }
+gameLoop()
 
-  function win(){
-    running = false;
-    clearInterval(loopId);
-    loopId = null;
-
-    setStatus("6:00 AM ✅");
-    for(let i=0;i<4;i++){
-      setTimeout(() => beep(520 + i*120, 0.08, "triangle", 0.05), i*110);
-    }
-    overlay.style.display = "flex";
-    overlay.querySelector("h1").textContent = "YOU SURVIVED";
-    overlay.querySelector("p").innerHTML = "Bien joué 😈 Tu as tenu jusqu’à <b>6:00 AM</b>.";
-    startBtn.textContent = "PLAY AGAIN";
-    howText.style.display = "none";
-  }
-
-  function start(){
-    reset();
-    running = true;
-    overlay.style.display = "none";
-    overlay.querySelector("h1").textContent = "Night Watch";
-    overlay.querySelector("p").innerHTML =
-      "Un truc rôde dans le couloir. Tu n’as que <b>Light</b> et <b>Door</b>. Si il arrive et que la porte est ouverte… c’est fini.";
-    startBtn.textContent = "START";
-
-    // main loop: 200ms tick
-    loopId = setInterval(() => {
-      if(!running) return;
-
-      // time
-      seconds += 0.2;
-      setTimeUI();
-
-      // battery drain
-      power -= baseDrain();
-      setPowerUI();
-
-      // AI: approach changes
-      // base approach speed grows over time
-      const progress = seconds / NIGHT_SECONDS; // 0..1
-      const speed = 0.35 + progress * 0.9;
-
-      // light slows it a bit (you "check"), door blocks if closed
-      let delta = speed * (0.8 + Math.random()*0.6);
-      if(lightOn) delta *= 0.65;     // checking slows it
-      if(doorOn) delta *= 0.35;      // door closed keeps it away but drains power
-
-      // sometimes it "rushes"
-      if(Math.random() < 0.02 + progress*0.02){
-        delta += 6 + Math.random()*6;
-        glitchPulse();
-      }
-
-      approach += delta;
-
-      // threat levels from approach
-      const newThreat =
-        approach < 25 ? 0 :
-        approach < 45 ? 1 :
-        approach < 60 ? 2 :
-        approach < 75 ? 3 :
-        approach < 92 ? 4 : 5;
-
-      if(newThreat !== threat){
-        threat = newThreat;
-        setThreatUI();
-        if(threat >= 4) beep(120, 0.05, "square", 0.04);
-      }
-
-      // occasional "bump" when close
-      if(approach > 70 && seconds - lastBump > 2.2 && Math.random() < 0.25){
-        lastBump = seconds;
-        noise(0.06, 0.04);
-        glitchPulse();
-      }
-
-      // lose condition: if approach hits 100 and door open
-      if(approach >= 100){
-        if(!doorOn) return lose();
-        // if door closed, push it back a bit
-        approach = 60 + Math.random()*8;
-        threat = 3;
-        setThreatUI();
-        beep(200, 0.09, "sawtooth", 0.05);
-      }
-
-      // battery empty = systems fail
-      if(power <= 0){
-        lightOn = false;
-        doorOn = false;
-        applyClasses();
-        setButtons();
-        setStatus("POWER OUT…");
-        glitchPulse();
-        // sudden death chance after power out
-        if(Math.random() < 0.18){
-          return lose();
-        }
-      }
-
-      // win condition
-      if(seconds >= NIGHT_SECONDS){
-        return win();
-      }
-    }, 200);
-  }
-
-  // --- Events
-  lightBtn.addEventListener("click", toggleLight);
-  doorBtn.addEventListener("click", toggleDoor);
-  resetBtn.addEventListener("click", start);
-
-  muteBtn.addEventListener("click", () => {
-    muted = !muted;
-    muteBtn.textContent = muted ? "SFX: OFF" : "SFX: ON";
-    beep(520, 0.04, "triangle", 0.03);
-  });
-
-  startBtn.addEventListener("click", () => {
-    // resume audio context on user gesture
-    if(ctx && ctx.state === "suspended") ctx.resume();
-    start();
-  });
-
-  howBtn.addEventListener("click", () => {
-    howText.style.display = (howText.style.display === "none") ? "block" : "none";
-  });
-
-  window.addEventListener("keydown", (e) => {
-    const k = e.key.toLowerCase();
-    if(k === "l") toggleLight();
-    if(k === "d") toggleDoor();
-    if(k === "r") start();
-  });
-
-  // Init
-  reset();
-})();
 </script>
+
 </body>
 </html>
