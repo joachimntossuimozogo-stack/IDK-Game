@@ -1,641 +1,561 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CrashDrive 3D (Fast + FreeCam + Parts)</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Crash Hub 3D (Best Physics)</title>
   <style>
     html,body{margin:0;height:100%;overflow:hidden;background:#87ceeb;font-family:Arial}
-    #renderCanvas{width:100%;height:100%;touch-action:none;display:block}
+    #c{width:100%;height:100%;display:block}
     #ui{
       position:fixed;left:14px;top:14px;z-index:10;
       background:rgba(10,14,22,.55);color:#fff;
       border:1px solid rgba(255,255,255,.18);
       border-radius:14px;padding:10px 12px;backdrop-filter: blur(10px);
-      min-width:330px
+      min-width:320px
     }
     .row{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-top:6px}
     .bar{height:10px;background:rgba(255,255,255,.18);border-radius:999px;overflow:hidden;margin-top:6px}
     .fill{height:100%;width:100%;transform-origin:left;transform:scaleX(0);
       background:linear-gradient(90deg,#64ff9a,#ffd166,#ff4d4d)}
-    .muted{opacity:.9;font-size:12px;line-height:1.35;margin-top:8px}
     button{
       margin-top:8px;width:100%;border:none;cursor:pointer;border-radius:12px;
       padding:10px 12px;font-weight:900;background:rgba(0,0,0,.35);color:#fff;
       border:1px solid rgba(255,255,255,.18);
     }
     button:active{transform:translateY(1px)}
-    .pill{
-      display:inline-flex;gap:6px;align-items:center;
-      padding:5px 8px;border-radius:999px;
-      background:rgba(255,255,255,.10);
-      border:1px solid rgba(255,255,255,.12);
-      font-size:12px;margin-top:8px
-    }
-    .kbd{
-      font-family: ui-monospace, Menlo, Consolas, monospace;
-      font-weight:900;padding:2px 6px;border-radius:8px;
-      background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.16)
-    }
+    .muted{opacity:.9;font-size:12px;line-height:1.35;margin-top:8px}
+    .kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:900;padding:2px 6px;border-radius:8px;
+      background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.16)}
   </style>
 </head>
 <body>
-  <canvas id="renderCanvas"></canvas>
+<canvas id="c"></canvas>
 
-  <div id="ui">
-    <div style="font-weight:900;letter-spacing:.2px">CrashDrive 3D ☀️ FAST + FREECAM</div>
-    <div class="row"><span>Speed</span><b id="spd">0</b></div>
-    <div class="row"><span>Damage</span><b id="dmg">0%</b></div>
-    <div class="bar"><div class="fill" id="dmgFill"></div></div>
-    <div class="row"><span>Cam</span><b id="camMode">FOLLOW</b></div>
-    <button id="reset">Reset (R)</button>
-
-    <div class="muted">
-      <span class="pill"><span class="kbd">W</span> accel</span>
-      <span class="pill"><span class="kbd">S</span> brake/reverse</span>
-      <span class="pill"><span class="kbd">A/D</span> turn</span>
-      <span class="pill"><span class="kbd">Space</span> handbrake</span><br>
-      <span class="pill"><span class="kbd">C</span> toggle FREE CAM</span>
-      <span class="pill">FREE CAM: <span class="kbd">↑↓←→</span> move + mouse to look</span><br>
-      💥 Gros chocs = pièces qui se détachent (capot/portes/pare-chocs).
-    </div>
+<div id="ui">
+  <div style="font-weight:900">Crash Hub 3D ☀️ (Raycast Car Physics)</div>
+  <div class="row"><span>Speed</span><b id="spd">0</b></div>
+  <div class="row"><span>Damage</span><b id="dmg">0%</b></div>
+  <div class="bar"><div class="fill" id="dmgFill"></div></div>
+  <button id="reset">Reset (R)</button>
+  <div class="muted">
+    <span class="kbd">W</span> accel • <span class="kbd">S</span> brake • <span class="kbd">A/D</span> steer •
+    <span class="kbd">Space</span> handbrake<br>
+    <span class="kbd">Mouse</span> rotate cam • <span class="kbd">Wheel</span> zoom • <span class="kbd">R</span> reset<br>
+    💥 Gros choc = capot se froisse + pièces se détachent.
   </div>
+</div>
 
-  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js";
 
-  <script>
-  (() => {
-    const canvas = document.getElementById("renderCanvas");
-    const engine = new BABYLON.Engine(canvas, true, { antialias:true });
+const canvas = document.getElementById("c");
+const spdEl = document.getElementById("spd");
+const dmgEl = document.getElementById("dmg");
+const dmgFill = document.getElementById("dmgFill");
+const resetBtn = document.getElementById("reset");
 
-    const spdEl = document.getElementById("spd");
-    const dmgEl = document.getElementById("dmg");
-    const dmgFill = document.getElementById("dmgFill");
-    const resetBtn = document.getElementById("reset");
-    const camModeEl = document.getElementById("camMode");
+const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
 
-    const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-    const lerp=(a,b,t)=>a+(b-a)*t;
+/* ----------------- THREE (render) ----------------- */
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
 
-    const keys = new Set();
-    window.addEventListener("keydown", e => {
-      const k = e.key.toLowerCase();
-      keys.add(k);
-      if(k==="r") resetCar();
-      if(k==="c") toggleCam();
-    });
-    window.addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87ceeb);
 
-    // ===== Scene
-    const scene = new BABYLON.Scene(engine);
-    scene.clearColor = new BABYLON.Color4(0.53, 0.81, 0.92, 1);
+const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 2000);
+camera.position.set(-12, 8, -14);
 
-    // Sun + skylight
-    const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.45, -1, 0.25), scene);
-    sun.position = new BABYLON.Vector3(100, 160, -80);
-    sun.intensity = 2.8;
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 2, 0);
+controls.minDistance = 6;
+controls.maxDistance = 60;
+controls.maxPolarAngle = Math.PI * 0.48;
 
-    const skyLight = new BABYLON.HemisphericLight("sky", new BABYLON.Vector3(0, 1, 0), scene);
-    skyLight.intensity = 1.25;
+// Sun light + sky light (BIG BRIGHT)
+const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+sun.position.set(80, 140, -60);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+scene.add(sun);
 
-    // Visible sun disc
-    const sunDisc = BABYLON.MeshBuilder.CreateDisc("sunDisc", { radius: 24, tessellation: 64 }, scene);
-    sunDisc.position = new BABYLON.Vector3(160, 130, -220);
-    sunDisc.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
-    const sunMat = new BABYLON.StandardMaterial("sunMat", scene);
-    sunMat.emissiveColor = new BABYLON.Color3(1, 0.95, 0.6);
-    sunMat.disableLighting = true;
-    sunDisc.material = sunMat;
+const hemi = new THREE.HemisphereLight(0xffffff, 0x88aa88, 1.1);
+scene.add(hemi);
 
-    // ===== Map (cleaner)
-    const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 1000, height: 1000 }, scene);
-    const gmat = new BABYLON.StandardMaterial("gmat", scene);
-    gmat.diffuseColor = new BABYLON.Color3(0.16, 0.60, 0.22);
-    gmat.specularColor = new BABYLON.Color3(0,0,0);
-    ground.material = gmat;
+// Visible sun disc
+{
+  const geo = new THREE.CircleGeometry(20, 64);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });
+  const disc = new THREE.Mesh(geo, mat);
+  disc.position.set(140, 120, -220);
+  disc.lookAt(0,0,0);
+  scene.add(disc);
+}
 
-    // Big road cross
-    function makeRoad(w,h, y=0.01){
-      const r = BABYLON.MeshBuilder.CreateGround("road", { width:w, height:h }, scene);
-      r.position.y = y;
-      const rm = new BABYLON.StandardMaterial("rmat"+Math.random(), scene);
-      rm.diffuseColor = new BABYLON.Color3(0.22,0.22,0.24);
-      rm.specularColor = new BABYLON.Color3(0,0,0);
-      r.material = rm;
-      return r;
-    }
-    makeRoad(900, 34);
-    const road2 = makeRoad(34, 900);
-    road2.position.y = 0.011;
+/* ----------------- CANNON (physics) ----------------- */
+const world = new CANNON.World({
+  gravity: new CANNON.Vec3(0, -9.82, 0),
+});
+world.broadphase = new CANNON.SAPBroadphase(world);
+world.allowSleep = true;
 
-    // Lane lines
-    function laneLine(w,h, y=0.02){
-      const l = BABYLON.MeshBuilder.CreateGround("line", { width:w, height:h }, scene);
-      l.position.y = y;
-      const lm = new BABYLON.StandardMaterial("lmat"+Math.random(), scene);
-      lm.diffuseColor = new BABYLON.Color3(0.95,0.92,0.35);
-      lm.specularColor = new BABYLON.Color3(0,0,0);
-      l.material = lm;
-      return l;
-    }
-    laneLine(820, 1.2);
-    const ll2 = laneLine(1.2, 820);
-    ll2.position.y = 0.021;
+const defaultMat = new CANNON.Material("default");
+const groundMat = new CANNON.Material("ground");
+world.defaultContactMaterial.friction = 0.5;
+world.defaultContactMaterial.restitution = 0.02;
 
-    // ===== Colliders (AABB)
-    const colliders = [];
-    function addCollider(mesh, pad=0.15){
-      colliders.push({ mesh, pad });
-      return mesh;
-    }
+world.addContactMaterial(new CANNON.ContactMaterial(defaultMat, groundMat, {
+  friction: 0.9,
+  restitution: 0.02,
+}));
 
-    function makeBox(name, x,z, w,d,h, color){
-      const m = BABYLON.MeshBuilder.CreateBox(name, { width:w, depth:d, height:h }, scene);
-      m.position.set(x, h/2, z);
-      const mat = new BABYLON.StandardMaterial(name+"_mat", scene);
-      mat.diffuseColor = BABYLON.Color3.FromHexString(color);
-      mat.specularColor = new BABYLON.Color3(0,0,0);
-      m.material = mat;
-      return m;
-    }
+/* ----------------- Ground + Map ----------------- */
+const groundBody = new CANNON.Body({ mass:0, material: groundMat });
+groundBody.addShape(new CANNON.Plane());
+groundBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
+world.addBody(groundBody);
 
-    // Boundaries
-    addCollider(makeBox("B1", 0, -490, 1000, 10, 10, "#c03b3b"), 0.0);
-    addCollider(makeBox("B2", 0,  490, 1000, 10, 10, "#c03b3b"), 0.0);
-    addCollider(makeBox("B3",-490, 0, 10, 1000, 10, "#c03b3b"), 0.0);
-    addCollider(makeBox("B4", 490, 0, 10, 1000, 10, "#c03b3b"), 0.0);
+const groundMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(1200, 1200, 1, 1),
+  new THREE.MeshStandardMaterial({ color: 0x2c9a3a, roughness:1 })
+);
+groundMesh.rotation.x = -Math.PI/2;
+groundMesh.receiveShadow = true;
+scene.add(groundMesh);
 
-    // Buildings rows (city vibe)
-    for(let i=0;i<40;i++){
-      const side = (i%2===0) ? -220 : 220;
-      const x = -420 + (i%20)*44;
-      const z = side + (Math.random()*70-35);
-      const h = 18 + Math.random()*34;
-      addCollider(makeBox("BLD"+i, x, z, 30, 30, h, "#9b3a3a"), 0.2);
-    }
-    for(let i=0;i<40;i++){
-      const side = (i%2===0) ? -220 : 220;
-      const z = -420 + (i%20)*44;
-      const x = side + (Math.random()*70-35);
-      const h = 18 + Math.random()*34;
-      addCollider(makeBox("BLD2_"+i, x, z, 30, 30, h, "#a33b3b"), 0.2);
-    }
+// Road cross
+function makeRoad(w,h,y=0.01){
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(w,h),
+    new THREE.MeshStandardMaterial({ color: 0x3a3a3f, roughness:1 })
+  );
+  m.rotation.x = -Math.PI/2;
+  m.position.y = y;
+  m.receiveShadow = true;
+  scene.add(m);
+}
+makeRoad(950, 34);
+makeRoad(34, 950, 0.011);
 
-    // Crash test zone (blocks)
-    for(let i=0;i<36;i++){
-      const x = 260 + (i%9)*16;
-      const z = 260 + Math.floor(i/9)*16;
-      addCollider(makeBox("CB"+i, x, z, 9, 9, 9, "#b22a2a"), 0.05);
-    }
+// Obstacles helper
+const obstacles = [];
+function addBoxObstacle(pos, size, color=0xb22a2a){
+  const [sx,sy,sz] = size;
 
-    // Walls arena
-    addCollider(makeBox("W1", 320, 0, 10, 240, 12, "#b22a2a"));
-    addCollider(makeBox("W2", 400, 0, 10, 240, 12, "#b22a2a"));
-    addCollider(makeBox("W3", 360,-120, 120, 10, 12, "#b22a2a"));
-    addCollider(makeBox("W4", 360, 120, 120, 10, 12, "#b22a2a"));
+  const body = new CANNON.Body({ mass:0, material: defaultMat });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(sx/2, sy/2, sz/2)));
+  body.position.set(pos[0], pos[1] + sy/2, pos[2]);
+  world.addBody(body);
 
-    // Ramps
-    function ramp(x,z,w,d,tiltDeg){
-      const m = BABYLON.MeshBuilder.CreateBox("ramp", { width:w, depth:d, height:2 }, scene);
-      m.position.set(x, 1, z);
-      m.rotation.x = BABYLON.Tools.ToRadians(tiltDeg);
-      const mat = new BABYLON.StandardMaterial("rampMat"+Math.random(), scene);
-      mat.diffuseColor = new BABYLON.Color3(0.25,0.35,0.9);
-      mat.specularColor = new BABYLON.Color3(0,0,0);
-      m.material = mat;
-      addCollider(m, 0.0);
-      return m;
-    }
-    ramp(80, 120, 46, 20, -18);
-    ramp(-120, -80, 40, 18, -16);
-    ramp(420, 200, 56, 22, -22);
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(sx,sy,sz),
+    new THREE.MeshStandardMaterial({ color, roughness:0.95 })
+  );
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
 
-    // ===== Car (more detailed + detachable parts)
-    const carRoot = new BABYLON.TransformNode("carRoot", scene);
+  obstacles.push({ body, mesh });
+}
 
-    const carMat = new BABYLON.StandardMaterial("carMat", scene);
-    carMat.diffuseColor = new BABYLON.Color3(0.10, 0.65, 1.0);
-    carMat.specularColor = new BABYLON.Color3(0.22,0.22,0.22);
+// Boundaries
+addBoxObstacle([0,0,-520], [1200, 12, 10]);
+addBoxObstacle([0,0, 520], [1200, 12, 10]);
+addBoxObstacle([-520,0,0], [10, 12, 1200]);
+addBoxObstacle([ 520,0,0], [10, 12, 1200]);
 
-    const metalMat = new BABYLON.StandardMaterial("metalMat", scene);
-    metalMat.diffuseColor = new BABYLON.Color3(0.12,0.12,0.12);
-    metalMat.specularColor = new BABYLON.Color3(0.1,0.1,0.1);
+// Pillars + trees + ramps (simple but clean)
+for(let i=0;i<18;i++){
+  addBoxObstacle([ -380 + i*45, 0, 220 + (Math.random()*60-30) ], [16, 28+Math.random()*30, 16], 0x9b3a3a);
+}
+for(let i=0;i<18;i++){
+  addBoxObstacle([ 220 + (Math.random()*60-30), 0, -380 + i*45 ], [16, 28+Math.random()*30, 16], 0xa33b3b);
+}
 
-    const glassMat = new BABYLON.StandardMaterial("glassMat", scene);
-    glassMat.diffuseColor = new BABYLON.Color3(0.04,0.07,0.12);
-    glassMat.alpha = 0.62;
-    glassMat.specularColor = new BABYLON.Color3(0.0,0.0,0.0);
+// Trees (collider trunk)
+for(let i=0;i<24;i++){
+  addBoxObstacle([ -250 + Math.random()*500, 0, -250 + Math.random()*500 ], [4, 18, 4], 0x7a5a2a);
+  // visual leaves
+  const leaves = new THREE.Mesh(
+    new THREE.SphereGeometry(7, 14, 14),
+    new THREE.MeshStandardMaterial({ color: 0x2f7d2f, roughness:1 })
+  );
+  leaves.position.set(obstacles.at(-1).body.position.x, obstacles.at(-1).body.position.y + 12, obstacles.at(-1).body.position.z);
+  leaves.castShadow = true;
+  scene.add(leaves);
+}
 
-    // Core body
-    const chassis = BABYLON.MeshBuilder.CreateBox("chassis", { width:2.8, height:0.75, depth:4.8 }, scene);
-    chassis.parent = carRoot;
-    chassis.position.y = 1.05;
-    chassis.material = carMat;
+// Ramps (physics as box tilted)
+function addRamp(pos, size, tiltDeg, color=0x3355ff){
+  const [sx,sy,sz] = size;
+  const body = new CANNON.Body({ mass:0, material: defaultMat });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(sx/2, sy/2, sz/2)));
+  body.position.set(pos[0], pos[1] + sy/2, pos[2]);
+  body.quaternion.setFromEuler(THREE.MathUtils.degToRad(tiltDeg), 0, 0);
+  world.addBody(body);
 
-    const cabin = BABYLON.MeshBuilder.CreateBox("cabin", { width:2.0, height:0.65, depth:2.4 }, scene);
-    cabin.parent = carRoot;
-    cabin.position.set(0, 1.55, -0.35);
-    cabin.material = carMat;
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(sx,sy,sz),
+    new THREE.MeshStandardMaterial({ color, roughness:0.9 })
+  );
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
 
-    const windows = BABYLON.MeshBuilder.CreateBox("windows", { width:1.75, height:0.38, depth:1.7 }, scene);
-    windows.parent = carRoot;
-    windows.position.set(0, 1.65, -0.35);
-    windows.material = glassMat;
+  obstacles.push({ body, mesh });
+}
+addRamp([90,0,120],[40,2,18], -18);
+addRamp([-120,0,-80],[34,2,16], -16);
+addRamp([360,0,200],[52,2,20], -22);
 
-    // Wheel helper
-    const wheelMat = new BABYLON.StandardMaterial("wheelMat", scene);
-    wheelMat.diffuseColor = new BABYLON.Color3(0.04,0.04,0.04);
+/* ----------------- Car (RaycastVehicle) ----------------- */
 
-    function wheel(x,z){
-      const w = BABYLON.MeshBuilder.CreateCylinder("wheel", { diameter:0.95, height:0.35, tessellation:20 }, scene);
-      w.rotation.z = Math.PI/2;
-      w.parent = carRoot;
-      w.position.set(x, 0.62, z);
-      w.material = wheelMat;
+// Input
+const keys = new Set();
+addEventListener("keydown", e => {
+  const k = e.key.toLowerCase();
+  keys.add(k);
+  if(k==="r") reset();
+});
+addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
+resetBtn.onclick = () => reset();
 
-      // rim (detail)
-      const rim = BABYLON.MeshBuilder.CreateCylinder("rim", { diameter:0.55, height:0.36, tessellation:18 }, scene);
-      rim.rotation.z = Math.PI/2;
-      rim.parent = w;
-      rim.position.set(0,0,0);
-      rim.material = metalMat;
-      rim.scaling.y = 0.9;
+// Chassis body
+const chassisShape = new CANNON.Box(new CANNON.Vec3(1.25, 0.4, 2.2));
+const chassisBody = new CANNON.Body({
+  mass: 180,
+  material: defaultMat,
+});
+chassisBody.addShape(chassisShape);
+chassisBody.position.set(0, 3, 0);
+chassisBody.angularDamping = 0.45;
+world.addBody(chassisBody);
 
-      return w;
-    }
-    const wh1 = wheel(-1.25,  1.85);
-    const wh2 = wheel( 1.25,  1.85);
-    const wh3 = wheel(-1.25, -1.85);
-    const wh4 = wheel( 1.25, -1.85);
+// Raycast vehicle
+const vehicle = new CANNON.RaycastVehicle({
+  chassisBody,
+  indexRightAxis: 0,
+  indexUpAxis: 1,
+  indexForwardAxis: 2,
+});
 
-    // Lights
-    function headLight(x,z){
-      const s = BABYLON.MeshBuilder.CreateSphere("hl", { diameter:0.22 }, scene);
-      s.parent = carRoot;
-      s.position.set(x, 0.95, z);
-      const m = new BABYLON.StandardMaterial("hlm"+Math.random(), scene);
-      m.emissiveColor = new BABYLON.Color3(1,1,0.85);
-      m.disableLighting = true;
-      s.material = m;
-    }
-    headLight(-0.9, 2.75);
-    headLight( 0.9, 2.75);
+// Wheel options (suspension)
+const wheelOptions = {
+  radius: 0.45,
+  directionLocal: new CANNON.Vec3(0, -1, 0),
+  suspensionStiffness: 36,
+  suspensionRestLength: 0.35,
+  frictionSlip: 4.4,
+  dampingRelaxation: 2.8,
+  dampingCompression: 4.2,
+  maxSuspensionForce: 120000,
+  rollInfluence: 0.02,
+  axleLocal: new CANNON.Vec3(1, 0, 0),
+  chassisConnectionPointLocal: new CANNON.Vec3(),
+  maxSuspensionTravel: 0.35,
+  customSlidingRotationalSpeed: -30,
+  useCustomSlidingRotationalSpeed: true,
+};
 
-    // ===== Detachable parts list
-    const detachable = [];
-    const detachedParts = []; // {mesh, vel, angVel}
+const wheelPositions = [
+  [-1.05, 0.05,  1.65],
+  [ 1.05, 0.05,  1.65],
+  [-1.05, 0.05, -1.55],
+  [ 1.05, 0.05, -1.55],
+];
+for (let i = 0; i < 4; i++) {
+  wheelOptions.chassisConnectionPointLocal.set(...wheelPositions[i]);
+  vehicle.addWheel({ ...wheelOptions });
+}
+vehicle.addToWorld(world);
 
-    function makePart(name, w,h,d, px,py,pz){
-      const p = BABYLON.MeshBuilder.CreateBox(name, { width:w, height:h, depth:d }, scene);
-      p.parent = carRoot;
-      p.position.set(px,py,pz);
-      p.material = carMat;
-      detachable.push({ mesh:p, name, detached:false });
-      return p;
-    }
+// Wheel bodies (for collisions/visual sync)
+const wheelBodies = [];
+vehicle.wheelInfos.forEach((w) => {
+  const wheelBody = new CANNON.Body({ mass: 1, material: defaultMat });
+  const wheelShape = new CANNON.Sphere(w.radius);
+  wheelBody.addShape(wheelShape);
+  wheelBody.collisionFilterGroup = 0; // no collide (raycast handles)
+  wheelBody.collisionFilterMask = 0;
+  wheelBodies.push(wheelBody);
+  world.addBody(wheelBody);
+});
 
-    // Parts (BeamNG-like)
-    const hood    = makePart("hood",    2.4, 0.20, 1.5, 0, 1.15,  1.45);
-    const trunk   = makePart("trunk",   2.4, 0.20, 1.2, 0, 1.15, -2.05);
-    const bumpF   = makePart("bumpF",   2.5, 0.35, 0.55,0, 0.90,  2.65);
-    const bumpB   = makePart("bumpB",   2.5, 0.35, 0.55,0, 0.90, -2.65);
-    const doorL   = makePart("doorL",   0.20,0.55, 1.5,-1.45,1.10,-0.25);
-    const doorR   = makePart("doorR",   0.20,0.55, 1.5, 1.45,1.10,-0.25);
+// Visual car group
+const car = new THREE.Group();
+scene.add(car);
 
-    function detachPart(partMesh, impulseDir, power){
-      if(!partMesh || !partMesh.parent) return;
+const carPaint = new THREE.MeshStandardMaterial({ color: 0x1aa6ff, roughness:0.65, metalness:0.05 });
+const dark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness:1 });
+const glass = new THREE.MeshStandardMaterial({ color: 0x0b1a2a, roughness:0.2, metalness:0.0, transparent:true, opacity:0.55 });
 
-      // keep world transform
-      partMesh.computeWorldMatrix(true);
-      const wp = partMesh.getAbsolutePosition().clone();
-      const wr = partMesh.rotationQuaternion
-        ? partMesh.rotationQuaternion.clone()
-        : BABYLON.Quaternion.FromEulerAngles(partMesh.rotation.x, partMesh.rotation.y, partMesh.rotation.z);
+const chassisMesh = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.8, 4.6), carPaint);
+chassisMesh.castShadow = true;
+car.add(chassisMesh);
 
-      partMesh.setParent(null);
-      partMesh.position.copyFrom(wp);
-      partMesh.rotationQuaternion = wr;
+const cabinMesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.7, 2.4), carPaint);
+cabinMesh.position.set(0, 0.55, -0.25);
+cabinMesh.castShadow = true;
+car.add(cabinMesh);
 
-      // give it velocity + spin
-      const vel = impulseDir.scale(power).add(new BABYLON.Vector3((Math.random()-0.5)*2, 2.5, (Math.random()-0.5)*2));
-      const angVel = new BABYLON.Vector3((Math.random()-0.5)*6, (Math.random()-0.5)*6, (Math.random()-0.5)*6);
+const windowsMesh = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.38, 1.75), glass);
+windowsMesh.position.set(0, 0.62, -0.25);
+car.add(windowsMesh);
 
-      detachedParts.push({ mesh:partMesh, vel, angVel });
-    }
+// Detachable parts (BeamNG vibe)
+function makePart(size, pos, mat){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(size[0],size[1],size[2]), mat);
+  m.position.set(pos[0],pos[1],pos[2]);
+  m.castShadow = true;
+  car.add(m);
+  return m;
+}
 
-    // ===== Driving state (faster)
-    const state = {
-      pos: new BABYLON.Vector3(0,0,0),
-      vel: new BABYLON.Vector3(0,0,0),
-      yaw: 0,
-      damage: 0,
-      lastSpeed: 0
-    };
+const parts = {
+  hood: makePart([2.4,0.18,1.5], [0, 0.15, 1.35], carPaint),
+  bumperF: makePart([2.55,0.35,0.55], [0,-0.10, 2.55], carPaint),
+  bumperB: makePart([2.55,0.35,0.55], [0,-0.10,-2.55], carPaint),
+  doorL: makePart([0.18,0.6,1.55], [-1.35, 0.05, -0.25], carPaint),
+  doorR: makePart([0.18,0.6,1.55], [ 1.35, 0.05, -0.25], carPaint),
+  trunk: makePart([2.4,0.18,1.2], [0, 0.15, -2.05], carPaint),
+};
 
-    function setDamage(v){
-      state.damage = clamp(v, 0, 100);
-      dmgEl.textContent = Math.round(state.damage) + "%";
-      dmgFill.style.transform = `scaleX(${state.damage/100})`;
+// Wheel visuals
+const wheelMeshes = [];
+for(let i=0;i<4;i++){
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.35,20), dark);
+  w.rotation.z = Math.PI/2;
+  w.castShadow = true;
+  scene.add(w);
+  wheelMeshes.push(w);
+}
 
-      // paint gets worse
-      const tint = 1 - state.damage/170;
-      carMat.diffuseColor = new BABYLON.Color3(0.10*tint, 0.65*tint, 1.0*tint);
+// Detached parts physics bodies (when they fly off)
+const detached = []; // {mesh, body}
+function detachPart(name, impulseWorld){
+  const mesh = parts[name];
+  if(!mesh || !mesh.parent) return;
 
-      // fake deformation (front/back squish)
-      bumpF.scaling.z = clamp(1 - state.damage/160, 0.65, 1);
-      hood.scaling.z  = clamp(1 - state.damage/220, 0.80, 1);
-      bumpB.scaling.z = clamp(1 - state.damage/190, 0.70, 1);
-      trunk.scaling.z = clamp(1 - state.damage/240, 0.84, 1);
-    }
+  // remove from car group, keep world transform
+  mesh.updateMatrixWorld(true);
+  const wp = new THREE.Vector3();
+  const wq = new THREE.Quaternion();
+  const ws = new THREE.Vector3();
+  mesh.matrixWorld.decompose(wp,wq,ws);
 
-    function resetCar(){
-      state.pos.set(0,0,0);
-      state.vel.set(0,0,0);
-      state.yaw = 0;
-      state.lastSpeed = 0;
-      setDamage(0);
+  car.remove(mesh);
+  scene.add(mesh);
+  mesh.position.copy(wp);
+  mesh.quaternion.copy(wq);
+  mesh.scale.copy(ws);
 
-      // reattach any detached parts (clean reset)
-      detachedParts.forEach(p => p.mesh.dispose());
-      detachedParts.length = 0;
+  // physics body for the part
+  const box = new THREE.Box3().setFromObject(mesh);
+  const size = new THREE.Vector3();
+  box.getSize(size);
 
-      // recreate parts cleanly (simple + safe)
-      // (reload page-style but without reloading)
-      detachable.forEach(d => { if(d.mesh && !d.mesh.isDisposed()) d.mesh.dispose(); });
-      detachable.length = 0;
+  const body = new CANNON.Body({ mass: 6, material: defaultMat });
+  body.addShape(new CANNON.Box(new CANNON.Vec3(size.x/2, size.y/2, size.z/2)));
+  body.position.set(wp.x, wp.y, wp.z);
+  body.quaternion.set(wq.x, wq.y, wq.z, wq.w);
+  body.velocity.set(
+    chassisBody.velocity.x + impulseWorld.x,
+    chassisBody.velocity.y + impulseWorld.y,
+    chassisBody.velocity.z + impulseWorld.z
+  );
+  body.angularVelocity.set((Math.random()-0.5)*8, (Math.random()-0.5)*8, (Math.random()-0.5)*8);
+  world.addBody(body);
 
-      // rebuild detachable parts
-      function rebuildPart(name,w,h,d,px,py,pz){
-        const p = BABYLON.MeshBuilder.CreateBox(name, { width:w, height:h, depth:d }, scene);
-        p.parent = carRoot;
-        p.position.set(px,py,pz);
-        p.material = carMat;
-        detachable.push({ mesh:p, name, detached:false });
-        return p;
+  detached.push({ mesh, body });
+}
+
+// Damage + crumple
+let damage = 0;
+let lastImpact = 0;
+
+function addDamage(amount){
+  damage = clamp(damage + amount, 0, 100);
+  dmgEl.textContent = Math.round(damage) + "%";
+  dmgFill.style.transform = `scaleX(${damage/100})`;
+
+  // paint gets darker
+  const tint = 1 - damage/180;
+  carPaint.color.setRGB(0.10*tint, 0.65*tint, 1.0*tint);
+
+  // crumple hood / bumpers (fake mesh squash)
+  const hoodSquash = clamp(1 - damage/180, 0.65, 1);
+  parts.hood.scale.z = hoodSquash;
+
+  const bfSquash = clamp(1 - damage/140, 0.55, 1);
+  parts.bumperF.scale.z = bfSquash;
+
+  const bbSquash = clamp(1 - damage/160, 0.65, 1);
+  parts.bumperB.scale.z = bbSquash;
+}
+
+// Detect collisions via contact events on chassis
+chassisBody.addEventListener("collide", (e) => {
+  const now = performance.now();
+  if(now - lastImpact < 80) return;
+  lastImpact = now;
+
+  // relative speed approx
+  const rvx = chassisBody.velocity.x - (e.body?.velocity?.x || 0);
+  const rvy = chassisBody.velocity.y - (e.body?.velocity?.y || 0);
+  const rvz = chassisBody.velocity.z - (e.body?.velocity?.z || 0);
+  const relSpeed = Math.sqrt(rvx*rvx + rvy*rvy + rvz*rvz);
+
+  // impact power
+  const impact = relSpeed * 10; // tuned
+  if(impact > 25) addDamage((impact - 25) * 0.18);
+
+  // detach thresholds (strong hits)
+  if(impact > 85 && Math.random() < 0.70) detachPart("bumperF", new THREE.Vector3(0,2,4));
+  if(impact > 105 && Math.random() < 0.55) detachPart("hood", new THREE.Vector3(0,3,3));
+  if(impact > 120 && Math.random() < 0.45) detachPart("doorL", new THREE.Vector3(-2,2,2));
+  if(impact > 125 && Math.random() < 0.45) detachPart("doorR", new THREE.Vector3( 2,2,2));
+  if(impact > 140 && Math.random() < 0.35) detachPart("trunk", new THREE.Vector3(0,2,-3));
+  if(impact > 150 && Math.random() < 0.30) detachPart("bumperB", new THREE.Vector3(0,2,-4));
+});
+
+// Driving forces
+const maxSteer = 0.55;
+const maxEngine = 12000;   // BIG power
+const maxBrake  = 80;
+
+function applyControls(){
+  const forward = keys.has("w");
+  const back = keys.has("s");
+  const left = keys.has("a");
+  const right = keys.has("d");
+  const hand = keys.has(" ");
+
+  // steering
+  const steer = (left ? 1 : 0) + (right ? -1 : 0);
+  const steerVal = steer * maxSteer;
+  vehicle.setSteeringValue(steerVal, 0);
+  vehicle.setSteeringValue(steerVal, 1);
+
+  // engine
+  let engineForce = 0;
+  if(forward) engineForce = -maxEngine;
+  if(back) engineForce = maxEngine * 0.6;
+
+  vehicle.applyEngineForce(engineForce, 2);
+  vehicle.applyEngineForce(engineForce, 3);
+
+  // brakes
+  const brake = (hand ? maxBrake : 0) + (!forward && !back ? 6 : 0);
+  vehicle.setBrake(brake, 0);
+  vehicle.setBrake(brake, 1);
+  vehicle.setBrake(brake, 2);
+  vehicle.setBrake(brake, 3);
+}
+
+/* ----------------- Reset ----------------- */
+function reset(){
+  damage = 0;
+  dmgEl.textContent = "0%";
+  dmgFill.style.transform = "scaleX(0)";
+  carPaint.color.set(0x1aa6ff);
+
+  // reattach parts if they exist
+  for(const k of Object.keys(parts)){
+    const m = parts[k];
+    if(m.parent !== car){
+      // remove physics body if detached
+      const idx = detached.findIndex(d => d.mesh === m);
+      if(idx >= 0){
+        world.removeBody(detached[idx].body);
+        detached.splice(idx,1);
       }
-      // assign globals again
-      window.__parts = {};
-      window.__parts.hood  = rebuildPart("hood", 2.4,0.20,1.5, 0,1.15, 1.45);
-      window.__parts.trunk = rebuildPart("trunk",2.4,0.20,1.2, 0,1.15,-2.05);
-      window.__parts.bumpF = rebuildPart("bumpF",2.5,0.35,0.55,0,0.90, 2.65);
-      window.__parts.bumpB = rebuildPart("bumpB",2.5,0.35,0.55,0,0.90,-2.65);
-      window.__parts.doorL = rebuildPart("doorL",0.20,0.55,1.5,-1.45,1.10,-0.25);
-      window.__parts.doorR = rebuildPart("doorR",0.20,0.55,1.5, 1.45,1.10,-0.25);
-
-      // also update refs used later
-      // (we’ll read from window.__parts inside loop)
-      carRoot.position.set(0,0,0);
-      carRoot.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(0,0,0);
+      scene.remove(m);
+      car.add(m);
+      m.scale.set(1,1,1);
+    }else{
+      m.scale.set(1,1,1);
     }
+  }
 
-    resetBtn.onclick = resetCar;
+  // clear remaining detached bodies
+  while(detached.length){
+    const d = detached.pop();
+    scene.remove(d.mesh);
+    world.removeBody(d.body);
+  }
 
-    // ===== Collision helpers
-    function getAABB(mesh, pad=0){
-      mesh.computeWorldMatrix(true);
-      const bb = mesh.getBoundingInfo().boundingBox;
-      const min = bb.minimumWorld.clone();
-      const max = bb.maximumWorld.clone();
-      min.x -= pad; min.z -= pad;
-      max.x += pad; max.z += pad;
-      return {min,max};
-    }
-    function circleAABBResolve(cx, cz, r, aabb){
-      const x = clamp(cx, aabb.min.x, aabb.max.x);
-      const z = clamp(cz, aabb.min.z, aabb.max.z);
-      const dx = cx - x;
-      const dz = cz - z;
-      const d2 = dx*dx + dz*dz;
-      if(d2 > r*r) return null;
-      const d = Math.sqrt(d2) || 0.0001;
-      const nx = dx / d;
-      const nz = dz / d;
-      const push = r - d;
-      return { nx, nz, push };
-    }
+  chassisBody.position.set(0, 3, 0);
+  chassisBody.velocity.set(0,0,0);
+  chassisBody.angularVelocity.set(0,0,0);
+  chassisBody.quaternion.set(0,0,0,1);
+  chassisBody.sleep();
 
-    // ===== Camera modes
-    let freeCam = false;
+  // reset vehicle suspension state
+  vehicle.wheelInfos.forEach(w => {
+    w.engineForce = 0;
+    w.brake = 0;
+    w.steering = 0;
+  });
 
-    // follow cam uses ArcRotate (you can rotate freely)
-    const followCam = new BABYLON.ArcRotateCamera("followCam",
-      BABYLON.Tools.ToRadians(210), BABYLON.Tools.ToRadians(65),
-      22, new BABYLON.Vector3(0,3,0), scene);
-    followCam.attachControl(canvas, true);
-    followCam.lowerRadiusLimit = 10;
-    followCam.upperRadiusLimit = 40;
-    followCam.wheelDeltaPercentage = 0.01;
-    followCam.panningSensibility = 80;
+  controls.target.set(0,2,0);
+  camera.position.set(-12, 8, -14);
+}
+reset();
 
-    // free cam (FPS camera) uses arrows to move so WASD stays for car
-    const free = new BABYLON.UniversalCamera("freeCam", new BABYLON.Vector3(0, 12, -25), scene);
-    free.setTarget(new BABYLON.Vector3(0, 4, 0));
-    free.attachControl(canvas, true);
-    free.speed = 1.0;
-    free.keysUp = [38];    // ArrowUp
-    free.keysDown = [40];  // ArrowDown
-    free.keysLeft = [37];  // ArrowLeft
-    free.keysRight = [39]; // ArrowRight
+/* ----------------- Loop ----------------- */
+let lastT = performance.now();
+function animate(){
+  requestAnimationFrame(animate);
 
-    scene.activeCamera = followCam;
-    camModeEl.textContent = "FOLLOW";
+  const t = performance.now();
+  const dt = Math.min((t - lastT)/1000, 1/30);
+  lastT = t;
 
-    function toggleCam(){
-      freeCam = !freeCam;
-      if(freeCam){
-        scene.activeCamera = free;
-        camModeEl.textContent = "FREE";
-        // start free cam near car
-        free.position = carRoot.position.add(new BABYLON.Vector3(0, 10, -20));
-        free.setTarget(carRoot.position.add(new BABYLON.Vector3(0, 3, 0)));
-      }else{
-        scene.activeCamera = followCam;
-        camModeEl.textContent = "FOLLOW";
-        followCam.target = carRoot.position.add(new BABYLON.Vector3(0, 3, 0));
-      }
-      scene.activeCamera.attachControl(canvas, true);
-    }
+  applyControls();
+  world.step(1/60, dt, 3);
 
-    // ===== Loop
-    const carRadius = 1.8;
-    let lastDetachCheck = 0;
+  // Sync car
+  car.position.set(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
+  car.quaternion.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
 
-    scene.onBeforeRenderObservable.add(() => {
-      const dt = scene.getEngine().getDeltaTime()/1000;
+  // Wheels sync
+  for(let i=0;i<vehicle.wheelInfos.length;i++){
+    vehicle.updateWheelTransform(i);
+    const wt = vehicle.wheelInfos[i].worldTransform;
+    wheelMeshes[i].position.set(wt.position.x, wt.position.y, wt.position.z);
+    wheelMeshes[i].quaternion.set(wt.quaternion.x, wt.quaternion.y, wt.quaternion.z, wt.quaternion.w);
+  }
 
-      // ===== Car controls (FAST)
-      const up = keys.has("w") || keys.has("arrowup");
-      const down = keys.has("s") || keys.has("arrowdown");
-      const left = keys.has("a") || keys.has("arrowleft");
-      const right = keys.has("d") || keys.has("arrowright");
-      const hand = keys.has(" ");
+  // Detached parts sync
+  for(const d of detached){
+    d.mesh.position.set(d.body.position.x, d.body.position.y, d.body.position.z);
+    d.mesh.quaternion.set(d.body.quaternion.x, d.body.quaternion.y, d.body.quaternion.z, d.body.quaternion.w);
+  }
 
-      const fx = Math.sin(state.yaw);
-      const fz = Math.cos(state.yaw);
+  // speed UI
+  const v = chassisBody.velocity;
+  const speed = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+  spdEl.textContent = Math.round(speed * 3.6) + " km/h";
 
-      // SPEED BOOST
-      const maxSpeed = 95;          // MUCH faster
-      const accel = hand ? 0 : 90;  // big accel
-      const brake = 80;
-      const friction = hand ? 2.0 : 4.2;
-      const turn = 3.2;
+  // camera follow feel (Orbit target follows car)
+  controls.target.lerp(new THREE.Vector3(car.position.x, car.position.y + 1.5, car.position.z), 0.12);
+  controls.update();
 
-      if(up){
-        state.vel.x += fx * accel * dt;
-        state.vel.z += fz * accel * dt;
-      }
-      if(down){
-        state.vel.x -= fx * brake * dt;
-        state.vel.z -= fz * brake * dt;
-      }
+  renderer.render(scene, camera);
+}
+animate();
 
-      let steer = 0;
-      if(left) steer -= 1;
-      if(right) steer += 1;
-
-      const speedForTurn = clamp((Math.hypot(state.vel.x, state.vel.z)/12), 0.25, 1);
-      state.yaw += steer * turn * speedForTurn * dt;
-
-      // friction
-      state.vel.x = lerp(state.vel.x, 0, friction*dt);
-      state.vel.z = lerp(state.vel.z, 0, friction*dt);
-
-      // clamp speed
-      const sp = Math.hypot(state.vel.x, state.vel.z);
-      if(sp > maxSpeed){
-        const s = maxSpeed / sp;
-        state.vel.x *= s;
-        state.vel.z *= s;
-      }
-
-      // move
-      state.pos.x += state.vel.x * dt;
-      state.pos.z += state.vel.z * dt;
-
-      // collisions
-      let hit = false;
-      let hitN = {x:0,z:0};
-
-      for(const c of colliders){
-        const aabb = getAABB(c.mesh, c.pad);
-        const res = circleAABBResolve(state.pos.x, state.pos.z, carRadius, aabb);
-        if(!res) continue;
-
-        state.pos.x += res.nx * res.push;
-        state.pos.z += res.nz * res.push;
-
-        const vn = state.vel.x*res.nx + state.vel.z*res.nz;
-        if(vn < 0){
-          state.vel.x -= 1.55 * vn * res.nx;
-          state.vel.z -= 1.55 * vn * res.nz;
-          hit = true;
-          hitN = {x:res.nx, z:res.nz};
-        }
-      }
-
-      const speedNow = Math.hypot(state.vel.x, state.vel.z);
-      const drop = Math.max(0, state.lastSpeed - speedNow);
-      state.lastSpeed = speedNow;
-
-      // UI speed
-      spdEl.textContent = Math.round(speedNow * 4.0) + " km/h";
-
-      // damage + detach pieces
-      if(hit){
-        const impact = (drop*14) + (speedNow*0.20);
-        if(impact > 6){
-          setDamage(state.damage + impact * 0.16);
-        }
-
-        const now = performance.now();
-        if(now - lastDetachCheck > 120){
-          lastDetachCheck = now;
-
-          // Detach thresholds (BeamNG vibe)
-          const parts = window.__parts || {};
-          const dir = new BABYLON.Vector3(hitN.x, 0.2, hitN.z).normalize();
-
-          if(impact > 20 && parts.bumpF && parts.bumpF.parent){
-            detachPart(parts.bumpF, dir, 10 + impact*0.25);
-          }
-          if(impact > 28 && parts.hood && parts.hood.parent){
-            detachPart(parts.hood, dir, 11 + impact*0.28);
-          }
-          if(impact > 36 && parts.doorL && parts.doorL.parent){
-            detachPart(parts.doorL, dir.add(new BABYLON.Vector3(-0.4,0,0)), 10 + impact*0.25);
-          }
-          if(impact > 40 && parts.doorR && parts.doorR.parent){
-            detachPart(parts.doorR, dir.add(new BABYLON.Vector3(0.4,0,0)), 10 + impact*0.25);
-          }
-          if(impact > 46 && parts.bumpB && parts.bumpB.parent){
-            detachPart(parts.bumpB, dir.scale(-1), 10 + impact*0.22);
-          }
-          if(impact > 52 && parts.trunk && parts.trunk.parent){
-            detachPart(parts.trunk, dir.scale(-1), 11 + impact*0.22);
-          }
-        }
-      }
-
-      // apply transform
-      carRoot.position.set(state.pos.x, 0, state.pos.z);
-      carRoot.rotationQuaternion = BABYLON.Quaternion.FromEulerAngles(0, state.yaw, 0);
-
-      // wheel spin
-      const spin = speedNow * dt * 2.2;
-      wh1.rotation.x += spin; wh2.rotation.x += spin; wh3.rotation.x += spin; wh4.rotation.x += spin;
-
-      // follow cam target
-      if(!freeCam){
-        followCam.target = BABYLON.Vector3.Lerp(followCam.target, carRoot.position.add(new BABYLON.Vector3(0,3,0)), 0.18);
-      }
-
-      // update detached parts physics (simple gravity)
-      for(const p of detachedParts){
-        p.vel.y -= 9.81 * dt;
-        p.mesh.position.addInPlace(p.vel.scale(dt));
-
-        // spin
-        p.mesh.rotation.x += p.angVel.x * dt;
-        p.mesh.rotation.y += p.angVel.y * dt;
-        p.mesh.rotation.z += p.angVel.z * dt;
-
-        // ground collision
-        if(p.mesh.position.y < 0.12){
-          p.mesh.position.y = 0.12;
-          p.vel.y *= -0.25; // little bounce
-          p.vel.x *= 0.86;
-          p.vel.z *= 0.86;
-          p.angVel.scaleInPlace(0.92);
-        }
-      }
-    });
-
-    function detachPart(partMesh, impulseDir, power){
-      if(!partMesh || !partMesh.parent) return;
-
-      partMesh.computeWorldMatrix(true);
-      const wp = partMesh.getAbsolutePosition().clone();
-
-      const wr = partMesh.rotationQuaternion
-        ? partMesh.rotationQuaternion.clone()
-        : BABYLON.Quaternion.FromEulerAngles(partMesh.rotation.x, partMesh.rotation.y, partMesh.rotation.z);
-
-      partMesh.setParent(null);
-      partMesh.position.copyFrom(wp);
-      partMesh.rotationQuaternion = wr;
-
-      const vel = impulseDir.scale(power).add(new BABYLON.Vector3((Math.random()-0.5)*3, 3.2, (Math.random()-0.5)*3));
-      const angVel = new BABYLON.Vector3((Math.random()-0.5)*7, (Math.random()-0.5)*7, (Math.random()-0.5)*7);
-
-      detachedParts.push({ mesh:partMesh, vel, angVel });
-    }
-
-    resetCar(); // start
-
-    engine.runRenderLoop(() => scene.render());
-    window.addEventListener("resize", () => engine.resize());
-
-  })();
-  </script>
+addEventListener("resize", () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+});
+</script>
 </body>
 </html>
