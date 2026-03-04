@@ -3,49 +3,46 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>CrashDrive 3D (Prototype)</title>
+  <title>CrashDrive 3D (Bright)</title>
   <style>
-    html,body{margin:0;height:100%;overflow:hidden;background:#0b0f16;font-family:Arial}
+    html,body{margin:0;height:100%;overflow:hidden;background:#87ceeb;font-family:Arial}
+    #renderCanvas{width:100%;height:100%;touch-action:none;display:block}
     #ui{
-      position:fixed; left:12px; top:12px; z-index:10;
-      background:rgba(16,24,39,.78); color:#e8f0ff;
-      border:1px solid rgba(255,255,255,.14);
-      border-radius:14px; padding:10px 12px; backdrop-filter: blur(10px);
-      min-width:240px;
+      position:fixed;left:14px;top:14px;z-index:10;
+      background:rgba(10,14,22,.55);color:#fff;
+      border:1px solid rgba(255,255,255,.18);
+      border-radius:14px;padding:10px 12px;backdrop-filter: blur(10px);
+      min-width:260px
     }
-    #ui b{font-weight:900}
     .row{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-top:6px}
-    .bar{height:10px;background:rgba(255,255,255,.12);border-radius:999px;overflow:hidden;margin-top:6px}
+    .bar{height:10px;background:rgba(255,255,255,.18);border-radius:999px;overflow:hidden;margin-top:6px}
     .fill{height:100%;width:100%;transform-origin:left;transform:scaleX(0);
       background:linear-gradient(90deg,#64ff9a,#ffd166,#ff4d4d)}
-    .muted{opacity:.8;font-size:12px;line-height:1.35;margin-top:8px}
+    .muted{opacity:.9;font-size:12px;line-height:1.35;margin-top:8px}
     button{
-      margin-top:8px; width:100%;
-      border:none; cursor:pointer; border-radius:12px;
-      padding:10px 12px; font-weight:900;
-      background:rgba(0,0,0,.35); color:#e8f0ff;
-      border:1px solid rgba(255,255,255,.14);
+      margin-top:8px;width:100%;border:none;cursor:pointer;border-radius:12px;
+      padding:10px 12px;font-weight:900;background:rgba(0,0,0,.35);color:#fff;
+      border:1px solid rgba(255,255,255,.18);
     }
     button:active{transform:translateY(1px)}
-    #renderCanvas{width:100%;height:100%;touch-action:none}
   </style>
 </head>
 <body>
   <canvas id="renderCanvas"></canvas>
 
   <div id="ui">
-    <div><b>CrashDrive 3D</b></div>
+    <div style="font-weight:900;letter-spacing:.2px">CrashDrive 3D ☀️</div>
     <div class="row"><span>Speed</span><b id="spd">0</b></div>
     <div class="row"><span>Damage</span><b id="dmg">0%</b></div>
     <div class="bar"><div class="fill" id="dmgFill"></div></div>
     <button id="reset">Reset (R)</button>
     <div class="muted">
-      Controls: <b>WASD</b> / arrows • <b>Space</b> handbrake • <b>R</b> reset<br>
-      Damage ↑ à chaque choc (déformation “fake”).
+      <b>W</b> accel • <b>S</b> brake/reverse • <b>A/D</b> turn • <b>Space</b> handbrake<br>
+      ☀️ Sky bleu + gros soleil + map claire.
     </div>
   </div>
 
-  <!-- Babylon + physics -->
+  <!-- Babylon + Ammo -->
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
   <script src="https://cdn.babylonjs.com/ammo.js"></script>
 
@@ -58,232 +55,288 @@
     const dmgFill = document.getElementById("dmgFill");
     const resetBtn = document.getElementById("reset");
 
-    let carBody, carMeshes = [], damage = 0;
-    let lastImpact = 0;
-
     const clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
-
     const keys = new Set();
-    window.addEventListener("keydown", (e)=>{ keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==="r") resetCar(); });
-    window.addEventListener("keyup", (e)=> keys.delete(e.key.toLowerCase()));
+    window.addEventListener("keydown", e => { keys.add(e.key.toLowerCase()); if(e.key.toLowerCase()==="r") resetCar(); });
+    window.addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
+
+    let scene, carRoot, carImpostor, damage = 0;
 
     async function createScene(){
-      const scene = new BABYLON.Scene(engine);
-      scene.clearColor = new BABYLON.Color4(0.03,0.05,0.08,1);
+      scene = new BABYLON.Scene(engine);
 
-      // Camera
-      const camera = new BABYLON.FollowCamera("cam", new BABYLON.Vector3(0,6,-12), scene);
-      camera.radius = 14;
-      camera.heightOffset = 6;
-      camera.rotationOffset = 180;
-      camera.cameraAcceleration = 0.08;
-      camera.maxCameraSpeed = 6;
+      // ✅ Ciel bleu clair
+      scene.clearColor = new BABYLON.Color4(0.53, 0.81, 0.92, 1);
 
-      // Light
-      const hemi = new BABYLON.HemisphericLight("h", new BABYLON.Vector3(0,1,0), scene);
-      hemi.intensity = 0.85;
+      // ✅ Lumières : gros soleil + lumière du ciel
+      const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-0.6, -1, 0.25), scene);
+      sun.position = new BABYLON.Vector3(80, 140, -60);
+      sun.intensity = 2.4; // SUPER BRIGHT
 
-      const dir = new BABYLON.DirectionalLight("d", new BABYLON.Vector3(-0.4,-1,0.3), scene);
-      dir.position = new BABYLON.Vector3(30,60,-30);
-      dir.intensity = 0.75;
+      const skyLight = new BABYLON.HemisphericLight("sky", new BABYLON.Vector3(0, 1, 0), scene);
+      skyLight.intensity = 1.2;
 
-      // Physics
+      // ✅ “Soleil visible” (sprite simple)
+      const sunDisc = BABYLON.MeshBuilder.CreateDisc("sunDisc", { radius: 18, tessellation: 64 }, scene);
+      sunDisc.position = new BABYLON.Vector3(120, 110, -140);
+      sunDisc.billboardMode = BABYLON.Mesh.BILLBOARDMODE_ALL;
+      const sunMat = new BABYLON.StandardMaterial("sunMat", scene);
+      sunMat.emissiveColor = new BABYLON.Color3(1, 0.95, 0.6);
+      sunMat.disableLighting = true;
+      sunDisc.material = sunMat;
+
+      // ✅ Physique
       const ammo = await Ammo();
       const plugin = new BABYLON.AmmoJSPlugin(true, ammo);
       scene.enablePhysics(new BABYLON.Vector3(0, -9.81, 0), plugin);
 
-      // Ground (big map)
-      const ground = BABYLON.MeshBuilder.CreateGround("ground", {width:300, height:300}, scene);
+      // ✅ Caméra 3e personne (bien)
+      const camera = new BABYLON.FollowCamera("cam", new BABYLON.Vector3(0, 8, -18), scene);
+      camera.radius = 18;
+      camera.heightOffset = 7;
+      camera.rotationOffset = 180;
+      camera.cameraAcceleration = 0.08;
+      camera.maxCameraSpeed = 10;
+
+      // ✅ Sol clair (grande map)
+      const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 600, height: 600 }, scene);
       const gmat = new BABYLON.StandardMaterial("gmat", scene);
-      gmat.diffuseColor = new BABYLON.Color3(0.06,0.08,0.12);
+      gmat.diffuseColor = new BABYLON.Color3(0.18, 0.55, 0.22); // vert herbe
       gmat.specularColor = new BABYLON.Color3(0,0,0);
       ground.material = gmat;
-      ground.receiveShadows = true;
-      ground.physicsImpostor = new BABYLON.PhysicsImpostor(ground, BABYLON.PhysicsImpostor.BoxImpostor,
-        { mass:0, restitution:0.05, friction:0.9 }, scene);
 
-      // Obstacles: walls + blocks + ramps
-      function wall(x,z,w,d,h=3){
-        const m = BABYLON.MeshBuilder.CreateBox("wall", {width:w, depth:d, height:h}, scene);
+      ground.physicsImpostor = new BABYLON.PhysicsImpostor(
+        ground, BABYLON.PhysicsImpostor.BoxImpostor,
+        { mass: 0, restitution: 0.02, friction: 1.1 }, scene
+      );
+
+      // ✅ Route (ruban gris)
+      const road = BABYLON.MeshBuilder.CreateGround("road", { width: 520, height: 22 }, scene);
+      road.position.y = 0.01;
+      const rmat = new BABYLON.StandardMaterial("rmat", scene);
+      rmat.diffuseColor = new BABYLON.Color3(0.22,0.22,0.24);
+      rmat.specularColor = new BABYLON.Color3(0,0,0);
+      road.material = rmat;
+
+      // ✅ Obstacles (murs + blocs + rampes)
+      function box(x,z,w,d,h,color){
+        const m = BABYLON.MeshBuilder.CreateBox("bx", { width:w, depth:d, height:h }, scene);
         m.position.set(x, h/2, z);
-        const mat = new BABYLON.StandardMaterial("wmat", scene);
-        mat.diffuseColor = new BABYLON.Color3(0.7,0.2,0.22);
+        const mat = new BABYLON.StandardMaterial("m", scene);
+        mat.diffuseColor = BABYLON.Color3.FromHexString(color);
+        mat.specularColor = new BABYLON.Color3(0,0,0);
         m.material = mat;
         m.physicsImpostor = new BABYLON.PhysicsImpostor(m, BABYLON.PhysicsImpostor.BoxImpostor,
-          { mass:0, restitution:0.02, friction:0.8 }, scene);
+          { mass:0, restitution:0.03, friction:1.0 }, scene);
         return m;
       }
-      function block(x,z,s=3){
-        const m = BABYLON.MeshBuilder.CreateBox("b", {size:s}, scene);
-        m.position.set(x, s/2, z);
-        const mat = new BABYLON.StandardMaterial("bmat", scene);
-        mat.diffuseColor = new BABYLON.Color3(0.55,0.18,0.18);
-        m.material = mat;
-        m.physicsImpostor = new BABYLON.PhysicsImpostor(m, BABYLON.PhysicsImpostor.BoxImpostor,
-          { mass:0, restitution:0.02, friction:0.85 }, scene);
-        return m;
-      }
-      function ramp(x,z,w=10,d=6,tilt=-18){
-        const m = BABYLON.MeshBuilder.CreateBox("r", {width:w, depth:d, height:1}, scene);
+      function ramp(x,z,w,d,tiltDeg){
+        const m = BABYLON.MeshBuilder.CreateBox("rp", { width:w, depth:d, height:1 }, scene);
         m.position.set(x, 0.5, z);
-        m.rotation.x = BABYLON.Tools.ToRadians(tilt);
-        const mat = new BABYLON.StandardMaterial("rmat", scene);
-        mat.diffuseColor = new BABYLON.Color3(0.20,0.28,0.55);
+        m.rotation.x = BABYLON.Tools.ToRadians(tiltDeg);
+        const mat = new BABYLON.StandardMaterial("rm", scene);
+        mat.diffuseColor = new BABYLON.Color3(0.25,0.35,0.9);
         m.material = mat;
         m.physicsImpostor = new BABYLON.PhysicsImpostor(m, BABYLON.PhysicsImpostor.BoxImpostor,
-          { mass:0, restitution:0.02, friction:0.9 }, scene);
-        return m;
+          { mass:0, restitution:0.02, friction:1.1 }, scene);
       }
 
-      // Outer boundaries
-      wall(0,-150,300,4,4); wall(0,150,300,4,4);
-      wall(-150,0,4,300,4); wall(150,0,4,300,4);
+      // borders
+      box(0,-290,600,6,5,"#c03b3b");
+      box(0, 290,600,6,5,"#c03b3b");
+      box(-290,0,6,600,5,"#c03b3b");
+      box( 290,0,6,600,5,"#c03b3b");
 
-      // Crash zone blocks
-      for(let i=0;i<18;i++){
-        block(-60 + (i%6)*10, -40 + Math.floor(i/6)*10, 3.2);
+      // crash blocks
+      for(let i=0;i<24;i++){
+        const x = -160 + (i%6)*26;
+        const z = -40 + Math.floor(i/6)*26;
+        box(x,z,6,6,6,"#b22a2a");
       }
 
-      // Arena + ramps
-      wall(60,0,4,80,4); wall(100,0,4,80,4); wall(80,-40,44,4,4); wall(80,40,44,4,4);
-      ramp(10, 40, 14, 7, -20);
-      ramp(40, -20, 12, 6, -16);
-      ramp(90, 70, 16, 8, -22);
+      // walls arena
+      box(120, 0, 6, 140, 6, "#b22a2a");
+      box(180, 0, 6, 140, 6, "#b22a2a");
+      box(150,-70, 70, 6, 6, "#b22a2a");
+      box(150, 70, 70, 6, 6, "#b22a2a");
 
-      // Car (simple rigidbody + fake deformation)
-      const chassis = BABYLON.MeshBuilder.CreateBox("chassis", {width:2.2, height:0.7, depth:4.0}, scene);
-      chassis.position.set(0, 2, 0);
+      // ramps
+      ramp(40, 60, 22, 12, -18);
+      ramp(90,-40, 18, 10, -16);
+      ramp(210, 120, 26, 12, -22);
 
-      const cmat = new BABYLON.StandardMaterial("cmat", scene);
-      cmat.diffuseColor = new BABYLON.Color3(0.95,0.75,0.2);
-      cmat.specularColor = new BABYLON.Color3(0.1,0.1,0.1);
-      chassis.material = cmat;
+      // ✅ Voiture plus stylée (châssis + toit + phares + roues)
+      carRoot = new BABYLON.TransformNode("carRoot", scene);
 
-      // Wheels (visual)
-      const wheelMat = new BABYLON.StandardMaterial("wmat2", scene);
+      const chassis = BABYLON.MeshBuilder.CreateBox("chassis", { width:2.4, height:0.65, depth:4.2 }, scene);
+      chassis.parent = carRoot;
+      chassis.position.y = 1.7;
+
+      const top = BABYLON.MeshBuilder.CreateBox("top", { width:1.8, height:0.55, depth:2.0 }, scene);
+      top.parent = carRoot;
+      top.position.y = 2.05;
+      top.position.z = -0.4;
+
+      const carMat = new BABYLON.StandardMaterial("carMat", scene);
+      carMat.diffuseColor = new BABYLON.Color3(0.12, 0.65, 1.0); // bleu stylé
+      carMat.specularColor = new BABYLON.Color3(0.2,0.2,0.2);
+      chassis.material = carMat;
+      top.material = carMat;
+
+      // windows
+      const win = BABYLON.MeshBuilder.CreateBox("win", { width:1.55, height:0.35, depth:1.4 }, scene);
+      win.parent = carRoot;
+      win.position.set(0, 2.1, -0.4);
+      const wmat = new BABYLON.StandardMaterial("wmat", scene);
+      wmat.diffuseColor = new BABYLON.Color3(0.05,0.08,0.12);
+      wmat.alpha = 0.65;
+      win.material = wmat;
+
+      // headlights (emissive)
+      function headLight(x,z){
+        const l = BABYLON.MeshBuilder.CreateSphere("hl", { diameter:0.28 }, scene);
+        l.parent = carRoot;
+        l.position.set(x, 1.55, z);
+        const lm = new BABYLON.StandardMaterial("lm", scene);
+        lm.emissiveColor = new BABYLON.Color3(1,1,0.85);
+        lm.diffuseColor = new BABYLON.Color3(0.2,0.2,0.2);
+        l.material = lm;
+      }
+      headLight(-0.75, 2.05);
+      headLight( 0.75, 2.05);
+
+      // wheels
+      const wheelMat = new BABYLON.StandardMaterial("wheelMat", scene);
       wheelMat.diffuseColor = new BABYLON.Color3(0.05,0.05,0.05);
 
-      function wheel(x,y,z){
-        const w = BABYLON.MeshBuilder.CreateCylinder("wheel", {diameter:0.8, height:0.35, tessellation:18}, scene);
+      function wheel(x,z){
+        const w = BABYLON.MeshBuilder.CreateCylinder("wheel", { diameter:0.85, height:0.35, tessellation:18 }, scene);
         w.rotation.z = Math.PI/2;
-        w.position.set(x,y,z);
+        w.parent = carRoot;
+        w.position.set(x, 1.28, z);
         w.material = wheelMat;
-        w.parent = chassis;
-        return w;
       }
-      const w1 = wheel(-1.1, -0.45,  1.4);
-      const w2 = wheel( 1.1, -0.45,  1.4);
-      const w3 = wheel(-1.1, -0.45, -1.4);
-      const w4 = wheel( 1.1, -0.45, -1.4);
+      wheel(-1.05,  1.55);
+      wheel( 1.05,  1.55);
+      wheel(-1.05, -1.55);
+      wheel( 1.05, -1.55);
 
-      // Bumpers (deform targets)
-      const bumperF = BABYLON.MeshBuilder.CreateBox("bf", {width:2.0, height:0.4, depth:0.4}, scene);
-      bumperF.position.set(0, -0.1, 2.2);
-      bumperF.material = cmat;
-      bumperF.parent = chassis;
+      // ✅ physics impostor on chassis (simple + marche)
+      chassis.physicsImpostor = new BABYLON.PhysicsImpostor(
+        chassis, BABYLON.PhysicsImpostor.BoxImpostor,
+        { mass: 220, restitution: 0.02, friction: 1.2 }, scene
+      );
+      carImpostor = chassis.physicsImpostor;
 
-      const bumperB = BABYLON.MeshBuilder.CreateBox("bb", {width:2.0, height:0.4, depth:0.4}, scene);
-      bumperB.position.set(0, -0.1, -2.2);
-      bumperB.material = cmat;
-      bumperB.parent = chassis;
+      // keep visuals in sync (carRoot follows chassis)
+      scene.onBeforeRenderObservable.add(() => {
+        const p = chassis.getAbsolutePosition();
+        carRoot.position.copyFrom(p);
 
-      // Physics impostor (rigid body)
-      chassis.physicsImpostor = new BABYLON.PhysicsImpostor(chassis, BABYLON.PhysicsImpostor.BoxImpostor,
-        { mass: 900, restitution:0.02, friction:0.9 }, scene);
+        // rotate root with chassis rotation
+        if(chassis.rotationQuaternion){
+          carRoot.rotationQuaternion = chassis.rotationQuaternion.clone();
+        }
+        // offset because carRoot includes chassis itself
+        chassis.position.y = 0; // keep at root
+      });
 
-      carBody = chassis;
-      carMeshes = [chassis, bumperF, bumperB];
+      camera.lockedTarget = carRoot;
 
-      camera.lockedTarget = chassis;
+      // drive loop (impulses -> avance VRAIMENT)
+      let lastSpeed = 0;
+      scene.onBeforeRenderObservable.add(() => {
+        if(!carImpostor) return;
 
-      // Impact -> damage
-      const obs = scene.onBeforeRenderObservable.add(() => {
-        if(!carBody || !carBody.physicsImpostor) return;
+        const dt = scene.getEngine().getDeltaTime() / 1000;
 
-        const v = carBody.physicsImpostor.getLinearVelocity();
-        const speed = v ? v.length() : 0;
-        spdEl.textContent = Math.round(speed * 3.6) + " km/h";
-
-        // Controls (simple forces)
-        const forward = carBody.forward; // direction
         const up = keys.has("w") || keys.has("arrowup");
         const down = keys.has("s") || keys.has("arrowdown");
         const left = keys.has("a") || keys.has("arrowleft");
         const right = keys.has("d") || keys.has("arrowright");
         const hand = keys.has(" ");
 
-        const engineForce = hand ? 0 : 1400;
-        const brakeForce = 900;
+        // current velocity
+        const v = carImpostor.getLinearVelocity() || new BABYLON.Vector3(0,0,0);
+        const speed = v.length();
+        spdEl.textContent = Math.round(speed * 3.6) + " km/h";
+
+        // forward direction from root
+        const forward = carRoot.forward.normalize();
+
+        // engine impulse (bigger so it moves for sure)
+        const engineImpulse = hand ? 0 : 18;
+        const brakeImpulse  = 14;
 
         if(up){
-          carBody.physicsImpostor.applyForce(forward.scale(engineForce), carBody.getAbsolutePosition());
+          carImpostor.applyImpulse(forward.scale(engineImpulse), carRoot.getAbsolutePosition());
         }
         if(down){
-          carBody.physicsImpostor.applyForce(forward.scale(-engineForce*0.75), carBody.getAbsolutePosition());
+          carImpostor.applyImpulse(forward.scale(-brakeImpulse), carRoot.getAbsolutePosition());
         }
 
-        // steering: apply torque
-        const torque = 90 * (hand ? 0.65 : 1);
-        if(left) carBody.physicsImpostor.applyTorque(new BABYLON.Vector3(0, -torque, 0));
-        if(right) carBody.physicsImpostor.applyTorque(new BABYLON.Vector3(0, torque, 0));
-
-        // handbrake: damp velocity sideways a bit
-        if(hand && v){
-          carBody.physicsImpostor.setLinearVelocity(v.scale(0.985));
+        // steering torque
+        const steer = (left ? 1 : 0) - (right ? 1 : 0);
+        if(steer !== 0){
+          carImpostor.applyTorque(new BABYLON.Vector3(0, steer * 5.5, 0));
         }
 
-        // Fake “damage look” based on impacts (detect sudden speed drops)
-        const now = performance.now();
-        if(now - lastImpact > 120){
-          // if speed is high and near ground, small chance to count bumps as impacts via angular vel
-          const av = carBody.physicsImpostor.getAngularVelocity();
-          const shake = av ? av.length() : 0;
-          if(speed > 12 && shake > 3.2){
-            lastImpact = now;
-            addDamage(speed * 1.2 + shake * 3);
-          }
+        // handbrake: slow down hard
+        if(hand){
+          carImpostor.setLinearVelocity(v.scale(0.985));
+          carImpostor.setAngularVelocity((carImpostor.getAngularVelocity()||BABYLON.Vector3.Zero()).scale(0.96));
         }
+
+        // damage when big speed drop (impact)
+        const drop = Math.max(0, lastSpeed - speed);
+        if(drop > 2.2){
+          addDamage(drop * 6.5);
+        }
+        lastSpeed = speed;
       });
 
-      function addDamage(amount){
-        damage = clamp(damage + amount * 0.06, 0, 100);
+      function addDamage(x){
+        damage = clamp(damage + x * 0.03, 0, 100);
         dmgEl.textContent = Math.round(damage) + "%";
         dmgFill.style.transform = `scaleX(${damage/100})`;
 
-        // Visual deformation (fake): bumpers get squished + color darkens
-        const squash = 1 - (damage/220); // small
-        bumperF.scaling.z = clamp(squash, 0.65, 1);
-        bumperB.scaling.z = clamp(squash, 0.65, 1);
+        // Fake deformation: compress front + darker paint
+        const squash = clamp(1 - damage/160, 0.72, 1);
+        top.scaling.z = squash;
+        chassis.scaling.z = clamp(1 - damage/220, 0.85, 1);
 
-        const tint = 1 - (damage/180);
-        carBody.material.diffuseColor = new BABYLON.Color3(0.95*tint, 0.75*tint, 0.2*tint);
+        const tint = 1 - damage/180;
+        carMat.diffuseColor = new BABYLON.Color3(0.12*tint, 0.65*tint, 1.0*tint);
       }
 
-      // Reset
+      // reset function
+      window.resetCar = resetCar;
       function resetCar(){
-        if(!carBody) return;
         damage = 0;
         dmgEl.textContent = "0%";
         dmgFill.style.transform = "scaleX(0)";
-        bumperF.scaling.z = 1;
-        bumperB.scaling.z = 1;
-        carBody.material.diffuseColor = new BABYLON.Color3(0.95,0.75,0.2);
+        chassis.scaling.z = 1;
+        top.scaling.z = 1;
+        carMat.diffuseColor = new BABYLON.Color3(0.12, 0.65, 1.0);
 
-        carBody.physicsImpostor.setLinearVelocity(new BABYLON.Vector3(0,0,0));
-        carBody.physicsImpostor.setAngularVelocity(new BABYLON.Vector3(0,0,0));
-        carBody.position.set(0, 2, 0);
-        carBody.rotationQuaternion = BABYLON.Quaternion.Identity();
+        carImpostor.setLinearVelocity(BABYLON.Vector3.Zero());
+        carImpostor.setAngularVelocity(BABYLON.Vector3.Zero());
+        carRoot.position.set(0, 2, 0);
+        carRoot.rotationQuaternion = BABYLON.Quaternion.Identity();
+        // put chassis back under root
+        chassis.position.set(0, 0, 0);
+        chassis.rotationQuaternion = BABYLON.Quaternion.Identity();
       }
-      window.resetCar = resetCar;
       resetBtn.onclick = resetCar;
+
+      // start position
+      resetCar();
 
       return scene;
     }
 
-    let scene;
     createScene().then(s => {
-      scene = s;
-      engine.runRenderLoop(() => scene.render());
+      engine.runRenderLoop(() => s.render());
     });
 
     window.addEventListener("resize", () => engine.resize());
