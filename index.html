@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Crash Hub 3D (Best Physics)</title>
+  <title>Car Physics Only</title>
   <style>
     html,body{margin:0;height:100%;overflow:hidden;background:#87ceeb;font-family:Arial}
-    #c{width:100%;height:100%;display:block}
+    canvas{width:100%;height:100%;display:block}
     #ui{
       position:fixed;left:14px;top:14px;z-index:10;
       background:rgba(10,14,22,.55);color:#fff;
       border:1px solid rgba(255,255,255,.18);
       border-radius:14px;padding:10px 12px;backdrop-filter: blur(10px);
-      min-width:320px
+      min-width:260px
     }
-    .row{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-top:6px}
+    .row{display:flex;justify-content:space-between;margin-top:6px;font-size:13px}
     .bar{height:10px;background:rgba(255,255,255,.18);border-radius:999px;overflow:hidden;margin-top:6px}
     .fill{height:100%;width:100%;transform-origin:left;transform:scaleX(0);
       background:linear-gradient(90deg,#64ff9a,#ffd166,#ff4d4d)}
@@ -23,539 +23,404 @@
       padding:10px 12px;font-weight:900;background:rgba(0,0,0,.35);color:#fff;
       border:1px solid rgba(255,255,255,.18);
     }
-    button:active{transform:translateY(1px)}
     .muted{opacity:.9;font-size:12px;line-height:1.35;margin-top:8px}
     .kbd{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:900;padding:2px 6px;border-radius:8px;
       background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.16)}
   </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+  <canvas id="c"></canvas>
 
-<div id="ui">
-  <div style="font-weight:900">Crash Hub 3D ☀️ (Raycast Car Physics)</div>
-  <div class="row"><span>Speed</span><b id="spd">0</b></div>
-  <div class="row"><span>Damage</span><b id="dmg">0%</b></div>
-  <div class="bar"><div class="fill" id="dmgFill"></div></div>
-  <button id="reset">Reset (R)</button>
-  <div class="muted">
-    <span class="kbd">W</span> accel • <span class="kbd">S</span> brake • <span class="kbd">A/D</span> steer •
-    <span class="kbd">Space</span> handbrake<br>
-    <span class="kbd">Mouse</span> rotate cam • <span class="kbd">Wheel</span> zoom • <span class="kbd">R</span> reset<br>
-    💥 Gros choc = capot se froisse + pièces se détachent.
+  <div id="ui">
+    <div style="font-weight:900">Car Physics Only ☀️</div>
+    <div class="row"><span>Speed</span><b id="spd">0</b></div>
+    <div class="row"><span>Damage</span><b id="dmg">0%</b></div>
+    <div class="bar"><div class="fill" id="dmgFill"></div></div>
+    <button id="reset">Reset (R)</button>
+    <div class="muted">
+      <span class="kbd">W</span> accel • <span class="kbd">S</span> brake/rev •
+      <span class="kbd">A/D</span> steer • <span class="kbd">Space</span> handbrake<br>
+      <span class="kbd">Mouse</span> rotate cam • <span class="kbd">Wheel</span> zoom
+    </div>
   </div>
-</div>
 
-<script type="module">
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
-import * as CANNON from "https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js";
-
-const canvas = document.getElementById("c");
-const spdEl = document.getElementById("spd");
-const dmgEl = document.getElementById("dmg");
-const dmgFill = document.getElementById("dmgFill");
-const resetBtn = document.getElementById("reset");
-
-const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
-
-/* ----------------- THREE (render) ----------------- */
-const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
-renderer.shadowMap.enabled = true;
-
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-
-const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 2000);
-camera.position.set(-12, 8, -14);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.target.set(0, 2, 0);
-controls.minDistance = 6;
-controls.maxDistance = 60;
-controls.maxPolarAngle = Math.PI * 0.48;
-
-// Sun light + sky light (BIG BRIGHT)
-const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-sun.position.set(80, 140, -60);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048,2048);
-scene.add(sun);
-
-const hemi = new THREE.HemisphereLight(0xffffff, 0x88aa88, 1.1);
-scene.add(hemi);
-
-// Visible sun disc
-{
-  const geo = new THREE.CircleGeometry(20, 64);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });
-  const disc = new THREE.Mesh(geo, mat);
-  disc.position.set(140, 120, -220);
-  disc.lookAt(0,0,0);
-  scene.add(disc);
-}
-
-/* ----------------- CANNON (physics) ----------------- */
-const world = new CANNON.World({
-  gravity: new CANNON.Vec3(0, -9.82, 0),
-});
-world.broadphase = new CANNON.SAPBroadphase(world);
-world.allowSleep = true;
-
-const defaultMat = new CANNON.Material("default");
-const groundMat = new CANNON.Material("ground");
-world.defaultContactMaterial.friction = 0.5;
-world.defaultContactMaterial.restitution = 0.02;
-
-world.addContactMaterial(new CANNON.ContactMaterial(defaultMat, groundMat, {
-  friction: 0.9,
-  restitution: 0.02,
-}));
-
-/* ----------------- Ground + Map ----------------- */
-const groundBody = new CANNON.Body({ mass:0, material: groundMat });
-groundBody.addShape(new CANNON.Plane());
-groundBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
-world.addBody(groundBody);
-
-const groundMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(1200, 1200, 1, 1),
-  new THREE.MeshStandardMaterial({ color: 0x2c9a3a, roughness:1 })
-);
-groundMesh.rotation.x = -Math.PI/2;
-groundMesh.receiveShadow = true;
-scene.add(groundMesh);
-
-// Road cross
-function makeRoad(w,h,y=0.01){
-  const m = new THREE.Mesh(
-    new THREE.PlaneGeometry(w,h),
-    new THREE.MeshStandardMaterial({ color: 0x3a3a3f, roughness:1 })
-  );
-  m.rotation.x = -Math.PI/2;
-  m.position.y = y;
-  m.receiveShadow = true;
-  scene.add(m);
-}
-makeRoad(950, 34);
-makeRoad(34, 950, 0.011);
-
-// Obstacles helper
-const obstacles = [];
-function addBoxObstacle(pos, size, color=0xb22a2a){
-  const [sx,sy,sz] = size;
-
-  const body = new CANNON.Body({ mass:0, material: defaultMat });
-  body.addShape(new CANNON.Box(new CANNON.Vec3(sx/2, sy/2, sz/2)));
-  body.position.set(pos[0], pos[1] + sy/2, pos[2]);
-  world.addBody(body);
-
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(sx,sy,sz),
-    new THREE.MeshStandardMaterial({ color, roughness:0.95 })
-  );
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-
-  obstacles.push({ body, mesh });
-}
-
-// Boundaries
-addBoxObstacle([0,0,-520], [1200, 12, 10]);
-addBoxObstacle([0,0, 520], [1200, 12, 10]);
-addBoxObstacle([-520,0,0], [10, 12, 1200]);
-addBoxObstacle([ 520,0,0], [10, 12, 1200]);
-
-// Pillars + trees + ramps (simple but clean)
-for(let i=0;i<18;i++){
-  addBoxObstacle([ -380 + i*45, 0, 220 + (Math.random()*60-30) ], [16, 28+Math.random()*30, 16], 0x9b3a3a);
-}
-for(let i=0;i<18;i++){
-  addBoxObstacle([ 220 + (Math.random()*60-30), 0, -380 + i*45 ], [16, 28+Math.random()*30, 16], 0xa33b3b);
-}
-
-// Trees (collider trunk)
-for(let i=0;i<24;i++){
-  addBoxObstacle([ -250 + Math.random()*500, 0, -250 + Math.random()*500 ], [4, 18, 4], 0x7a5a2a);
-  // visual leaves
-  const leaves = new THREE.Mesh(
-    new THREE.SphereGeometry(7, 14, 14),
-    new THREE.MeshStandardMaterial({ color: 0x2f7d2f, roughness:1 })
-  );
-  leaves.position.set(obstacles.at(-1).body.position.x, obstacles.at(-1).body.position.y + 12, obstacles.at(-1).body.position.z);
-  leaves.castShadow = true;
-  scene.add(leaves);
-}
-
-// Ramps (physics as box tilted)
-function addRamp(pos, size, tiltDeg, color=0x3355ff){
-  const [sx,sy,sz] = size;
-  const body = new CANNON.Body({ mass:0, material: defaultMat });
-  body.addShape(new CANNON.Box(new CANNON.Vec3(sx/2, sy/2, sz/2)));
-  body.position.set(pos[0], pos[1] + sy/2, pos[2]);
-  body.quaternion.setFromEuler(THREE.MathUtils.degToRad(tiltDeg), 0, 0);
-  world.addBody(body);
-
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(sx,sy,sz),
-    new THREE.MeshStandardMaterial({ color, roughness:0.9 })
-  );
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  scene.add(mesh);
-
-  obstacles.push({ body, mesh });
-}
-addRamp([90,0,120],[40,2,18], -18);
-addRamp([-120,0,-80],[34,2,16], -16);
-addRamp([360,0,200],[52,2,20], -22);
-
-/* ----------------- Car (RaycastVehicle) ----------------- */
-
-// Input
-const keys = new Set();
-addEventListener("keydown", e => {
-  const k = e.key.toLowerCase();
-  keys.add(k);
-  if(k==="r") reset();
-});
-addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
-resetBtn.onclick = () => reset();
-
-// Chassis body
-const chassisShape = new CANNON.Box(new CANNON.Vec3(1.25, 0.4, 2.2));
-const chassisBody = new CANNON.Body({
-  mass: 180,
-  material: defaultMat,
-});
-chassisBody.addShape(chassisShape);
-chassisBody.position.set(0, 3, 0);
-chassisBody.angularDamping = 0.45;
-world.addBody(chassisBody);
-
-// Raycast vehicle
-const vehicle = new CANNON.RaycastVehicle({
-  chassisBody,
-  indexRightAxis: 0,
-  indexUpAxis: 1,
-  indexForwardAxis: 2,
-});
-
-// Wheel options (suspension)
-const wheelOptions = {
-  radius: 0.45,
-  directionLocal: new CANNON.Vec3(0, -1, 0),
-  suspensionStiffness: 36,
-  suspensionRestLength: 0.35,
-  frictionSlip: 4.4,
-  dampingRelaxation: 2.8,
-  dampingCompression: 4.2,
-  maxSuspensionForce: 120000,
-  rollInfluence: 0.02,
-  axleLocal: new CANNON.Vec3(1, 0, 0),
-  chassisConnectionPointLocal: new CANNON.Vec3(),
-  maxSuspensionTravel: 0.35,
-  customSlidingRotationalSpeed: -30,
-  useCustomSlidingRotationalSpeed: true,
-};
-
-const wheelPositions = [
-  [-1.05, 0.05,  1.65],
-  [ 1.05, 0.05,  1.65],
-  [-1.05, 0.05, -1.55],
-  [ 1.05, 0.05, -1.55],
-];
-for (let i = 0; i < 4; i++) {
-  wheelOptions.chassisConnectionPointLocal.set(...wheelPositions[i]);
-  vehicle.addWheel({ ...wheelOptions });
-}
-vehicle.addToWorld(world);
-
-// Wheel bodies (for collisions/visual sync)
-const wheelBodies = [];
-vehicle.wheelInfos.forEach((w) => {
-  const wheelBody = new CANNON.Body({ mass: 1, material: defaultMat });
-  const wheelShape = new CANNON.Sphere(w.radius);
-  wheelBody.addShape(wheelShape);
-  wheelBody.collisionFilterGroup = 0; // no collide (raycast handles)
-  wheelBody.collisionFilterMask = 0;
-  wheelBodies.push(wheelBody);
-  world.addBody(wheelBody);
-});
-
-// Visual car group
-const car = new THREE.Group();
-scene.add(car);
-
-const carPaint = new THREE.MeshStandardMaterial({ color: 0x1aa6ff, roughness:0.65, metalness:0.05 });
-const dark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness:1 });
-const glass = new THREE.MeshStandardMaterial({ color: 0x0b1a2a, roughness:0.2, metalness:0.0, transparent:true, opacity:0.55 });
-
-const chassisMesh = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.8, 4.6), carPaint);
-chassisMesh.castShadow = true;
-car.add(chassisMesh);
-
-const cabinMesh = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.7, 2.4), carPaint);
-cabinMesh.position.set(0, 0.55, -0.25);
-cabinMesh.castShadow = true;
-car.add(cabinMesh);
-
-const windowsMesh = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.38, 1.75), glass);
-windowsMesh.position.set(0, 0.62, -0.25);
-car.add(windowsMesh);
-
-// Detachable parts (BeamNG vibe)
-function makePart(size, pos, mat){
-  const m = new THREE.Mesh(new THREE.BoxGeometry(size[0],size[1],size[2]), mat);
-  m.position.set(pos[0],pos[1],pos[2]);
-  m.castShadow = true;
-  car.add(m);
-  return m;
-}
-
-const parts = {
-  hood: makePart([2.4,0.18,1.5], [0, 0.15, 1.35], carPaint),
-  bumperF: makePart([2.55,0.35,0.55], [0,-0.10, 2.55], carPaint),
-  bumperB: makePart([2.55,0.35,0.55], [0,-0.10,-2.55], carPaint),
-  doorL: makePart([0.18,0.6,1.55], [-1.35, 0.05, -0.25], carPaint),
-  doorR: makePart([0.18,0.6,1.55], [ 1.35, 0.05, -0.25], carPaint),
-  trunk: makePart([2.4,0.18,1.2], [0, 0.15, -2.05], carPaint),
-};
-
-// Wheel visuals
-const wheelMeshes = [];
-for(let i=0;i<4;i++){
-  const w = new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.35,20), dark);
-  w.rotation.z = Math.PI/2;
-  w.castShadow = true;
-  scene.add(w);
-  wheelMeshes.push(w);
-}
-
-// Detached parts physics bodies (when they fly off)
-const detached = []; // {mesh, body}
-function detachPart(name, impulseWorld){
-  const mesh = parts[name];
-  if(!mesh || !mesh.parent) return;
-
-  // remove from car group, keep world transform
-  mesh.updateMatrixWorld(true);
-  const wp = new THREE.Vector3();
-  const wq = new THREE.Quaternion();
-  const ws = new THREE.Vector3();
-  mesh.matrixWorld.decompose(wp,wq,ws);
-
-  car.remove(mesh);
-  scene.add(mesh);
-  mesh.position.copy(wp);
-  mesh.quaternion.copy(wq);
-  mesh.scale.copy(ws);
-
-  // physics body for the part
-  const box = new THREE.Box3().setFromObject(mesh);
-  const size = new THREE.Vector3();
-  box.getSize(size);
-
-  const body = new CANNON.Body({ mass: 6, material: defaultMat });
-  body.addShape(new CANNON.Box(new CANNON.Vec3(size.x/2, size.y/2, size.z/2)));
-  body.position.set(wp.x, wp.y, wp.z);
-  body.quaternion.set(wq.x, wq.y, wq.z, wq.w);
-  body.velocity.set(
-    chassisBody.velocity.x + impulseWorld.x,
-    chassisBody.velocity.y + impulseWorld.y,
-    chassisBody.velocity.z + impulseWorld.z
-  );
-  body.angularVelocity.set((Math.random()-0.5)*8, (Math.random()-0.5)*8, (Math.random()-0.5)*8);
-  world.addBody(body);
-
-  detached.push({ mesh, body });
-}
-
-// Damage + crumple
-let damage = 0;
-let lastImpact = 0;
-
-function addDamage(amount){
-  damage = clamp(damage + amount, 0, 100);
-  dmgEl.textContent = Math.round(damage) + "%";
-  dmgFill.style.transform = `scaleX(${damage/100})`;
-
-  // paint gets darker
-  const tint = 1 - damage/180;
-  carPaint.color.setRGB(0.10*tint, 0.65*tint, 1.0*tint);
-
-  // crumple hood / bumpers (fake mesh squash)
-  const hoodSquash = clamp(1 - damage/180, 0.65, 1);
-  parts.hood.scale.z = hoodSquash;
-
-  const bfSquash = clamp(1 - damage/140, 0.55, 1);
-  parts.bumperF.scale.z = bfSquash;
-
-  const bbSquash = clamp(1 - damage/160, 0.65, 1);
-  parts.bumperB.scale.z = bbSquash;
-}
-
-// Detect collisions via contact events on chassis
-chassisBody.addEventListener("collide", (e) => {
-  const now = performance.now();
-  if(now - lastImpact < 80) return;
-  lastImpact = now;
-
-  // relative speed approx
-  const rvx = chassisBody.velocity.x - (e.body?.velocity?.x || 0);
-  const rvy = chassisBody.velocity.y - (e.body?.velocity?.y || 0);
-  const rvz = chassisBody.velocity.z - (e.body?.velocity?.z || 0);
-  const relSpeed = Math.sqrt(rvx*rvx + rvy*rvy + rvz*rvz);
-
-  // impact power
-  const impact = relSpeed * 10; // tuned
-  if(impact > 25) addDamage((impact - 25) * 0.18);
-
-  // detach thresholds (strong hits)
-  if(impact > 85 && Math.random() < 0.70) detachPart("bumperF", new THREE.Vector3(0,2,4));
-  if(impact > 105 && Math.random() < 0.55) detachPart("hood", new THREE.Vector3(0,3,3));
-  if(impact > 120 && Math.random() < 0.45) detachPart("doorL", new THREE.Vector3(-2,2,2));
-  if(impact > 125 && Math.random() < 0.45) detachPart("doorR", new THREE.Vector3( 2,2,2));
-  if(impact > 140 && Math.random() < 0.35) detachPart("trunk", new THREE.Vector3(0,2,-3));
-  if(impact > 150 && Math.random() < 0.30) detachPart("bumperB", new THREE.Vector3(0,2,-4));
-});
-
-// Driving forces
-const maxSteer = 0.55;
-const maxEngine = 12000;   // BIG power
-const maxBrake  = 80;
-
-function applyControls(){
-  const forward = keys.has("w");
-  const back = keys.has("s");
-  const left = keys.has("a");
-  const right = keys.has("d");
-  const hand = keys.has(" ");
-
-  // steering
-  const steer = (left ? 1 : 0) + (right ? -1 : 0);
-  const steerVal = steer * maxSteer;
-  vehicle.setSteeringValue(steerVal, 0);
-  vehicle.setSteeringValue(steerVal, 1);
-
-  // engine
-  let engineForce = 0;
-  if(forward) engineForce = -maxEngine;
-  if(back) engineForce = maxEngine * 0.6;
-
-  vehicle.applyEngineForce(engineForce, 2);
-  vehicle.applyEngineForce(engineForce, 3);
-
-  // brakes
-  const brake = (hand ? maxBrake : 0) + (!forward && !back ? 6 : 0);
-  vehicle.setBrake(brake, 0);
-  vehicle.setBrake(brake, 1);
-  vehicle.setBrake(brake, 2);
-  vehicle.setBrake(brake, 3);
-}
-
-/* ----------------- Reset ----------------- */
-function reset(){
-  damage = 0;
-  dmgEl.textContent = "0%";
-  dmgFill.style.transform = "scaleX(0)";
-  carPaint.color.set(0x1aa6ff);
-
-  // reattach parts if they exist
-  for(const k of Object.keys(parts)){
-    const m = parts[k];
-    if(m.parent !== car){
-      // remove physics body if detached
-      const idx = detached.findIndex(d => d.mesh === m);
-      if(idx >= 0){
-        world.removeBody(detached[idx].body);
-        detached.splice(idx,1);
-      }
-      scene.remove(m);
-      car.add(m);
-      m.scale.set(1,1,1);
-    }else{
-      m.scale.set(1,1,1);
+  <!-- THREE (no import) -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- CANNON-ES UMD (works in normal script tag) -->
+  <script src="https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.umd.js"></script>
+
+  <script>
+  (function(){
+    const canvas = document.getElementById("c");
+    const spdEl = document.getElementById("spd");
+    const dmgEl = document.getElementById("dmg");
+    const dmgFill = document.getElementById("dmgFill");
+    const resetBtn = document.getElementById("reset");
+
+    const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
+
+    // --- THREE
+    const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87ceeb);
+
+    const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 1000);
+    camera.position.set(-10, 7, -12);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1.6, 0);
+    controls.minDistance = 5;
+    controls.maxDistance = 45;
+    controls.maxPolarAngle = Math.PI * 0.48;
+
+    const sun = new THREE.DirectionalLight(0xffffff, 2.3);
+    sun.position.set(60, 120, -60);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048,2048);
+    scene.add(sun);
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x88aa88, 1.1);
+    scene.add(hemi);
+
+    // visible sun disc
+    {
+      const disc = new THREE.Mesh(
+        new THREE.CircleGeometry(18, 64),
+        new THREE.MeshBasicMaterial({color: 0xfff2b0})
+      );
+      disc.position.set(120, 110, -180);
+      disc.lookAt(0,0,0);
+      scene.add(disc);
     }
-  }
 
-  // clear remaining detached bodies
-  while(detached.length){
-    const d = detached.pop();
-    scene.remove(d.mesh);
-    world.removeBody(d.body);
-  }
+    // ground (just for car)
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(400, 400),
+      new THREE.MeshStandardMaterial({color: 0x4b4b50, roughness: 1})
+    );
+    ground.rotation.x = -Math.PI/2;
+    ground.receiveShadow = true;
+    scene.add(ground);
 
-  chassisBody.position.set(0, 3, 0);
-  chassisBody.velocity.set(0,0,0);
-  chassisBody.angularVelocity.set(0,0,0);
-  chassisBody.quaternion.set(0,0,0,1);
-  chassisBody.sleep();
+    // --- CANNON
+    const CANNON = window.CANNON;
+    const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+    world.broadphase = new CANNON.SAPBroadphase(world);
+    world.allowSleep = true;
 
-  // reset vehicle suspension state
-  vehicle.wheelInfos.forEach(w => {
-    w.engineForce = 0;
-    w.brake = 0;
-    w.steering = 0;
-  });
+    const defaultMat = new CANNON.Material("default");
+    const groundMat = new CANNON.Material("ground");
+    world.addContactMaterial(new CANNON.ContactMaterial(defaultMat, groundMat, {
+      friction: 0.95,
+      restitution: 0.02
+    }));
 
-  controls.target.set(0,2,0);
-  camera.position.set(-12, 8, -14);
-}
-reset();
+    const groundBody = new CANNON.Body({ mass: 0, material: groundMat });
+    groundBody.addShape(new CANNON.Plane());
+    groundBody.quaternion.setFromEuler(-Math.PI/2, 0, 0);
+    world.addBody(groundBody);
 
-/* ----------------- Loop ----------------- */
-let lastT = performance.now();
-function animate(){
-  requestAnimationFrame(animate);
+    // --- Input
+    const keys = new Set();
+    addEventListener("keydown", (e)=>{
+      const k = e.key.toLowerCase();
+      keys.add(k);
+      if(k==="r") reset();
+    });
+    addEventListener("keyup", (e)=> keys.delete(e.key.toLowerCase()));
+    resetBtn.onclick = reset;
 
-  const t = performance.now();
-  const dt = Math.min((t - lastT)/1000, 1/30);
-  lastT = t;
+    // --- Car physics (RaycastVehicle)
+    const chassisBody = new CANNON.Body({ mass: 220, material: defaultMat });
+    chassisBody.addShape(new CANNON.Box(new CANNON.Vec3(1.25, 0.45, 2.2)));
+    chassisBody.position.set(0, 2.5, 0);
+    chassisBody.angularDamping = 0.55;
+    world.addBody(chassisBody);
 
-  applyControls();
-  world.step(1/60, dt, 3);
+    // Lower center of mass (more stable)
+    chassisBody.shapeOffsets[0].y = -0.15;
 
-  // Sync car
-  car.position.set(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
-  car.quaternion.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
+    const vehicle = new CANNON.RaycastVehicle({
+      chassisBody,
+      indexRightAxis: 0,
+      indexUpAxis: 1,
+      indexForwardAxis: 2,
+    });
 
-  // Wheels sync
-  for(let i=0;i<vehicle.wheelInfos.length;i++){
-    vehicle.updateWheelTransform(i);
-    const wt = vehicle.wheelInfos[i].worldTransform;
-    wheelMeshes[i].position.set(wt.position.x, wt.position.y, wt.position.z);
-    wheelMeshes[i].quaternion.set(wt.quaternion.x, wt.quaternion.y, wt.quaternion.z, wt.quaternion.w);
-  }
+    const wheelOpts = {
+      radius: 0.45,
+      directionLocal: new CANNON.Vec3(0, -1, 0),
+      suspensionStiffness: 42,
+      suspensionRestLength: 0.33,
+      frictionSlip: 5.2,
+      dampingRelaxation: 3.2,
+      dampingCompression: 4.8,
+      maxSuspensionForce: 140000,
+      rollInfluence: 0.03,
+      axleLocal: new CANNON.Vec3(1, 0, 0),
+      chassisConnectionPointLocal: new CANNON.Vec3(),
+      maxSuspensionTravel: 0.35,
+      customSlidingRotationalSpeed: -30,
+      useCustomSlidingRotationalSpeed: true,
+    };
 
-  // Detached parts sync
-  for(const d of detached){
-    d.mesh.position.set(d.body.position.x, d.body.position.y, d.body.position.z);
-    d.mesh.quaternion.set(d.body.quaternion.x, d.body.quaternion.y, d.body.quaternion.z, d.body.quaternion.w);
-  }
+    const pts = [
+      [-1.05, 0.05,  1.65],
+      [ 1.05, 0.05,  1.65],
+      [-1.05, 0.05, -1.55],
+      [ 1.05, 0.05, -1.55],
+    ];
+    for(let i=0;i<4;i++){
+      wheelOpts.chassisConnectionPointLocal.set(pts[i][0], pts[i][1], pts[i][2]);
+      vehicle.addWheel(Object.assign({}, wheelOpts));
+    }
+    vehicle.addToWorld(world);
 
-  // speed UI
-  const v = chassisBody.velocity;
-  const speed = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
-  spdEl.textContent = Math.round(speed * 3.6) + " km/h";
+    // --- Car visuals (detailed + detachable)
+    const car = new THREE.Group();
+    scene.add(car);
 
-  // camera follow feel (Orbit target follows car)
-  controls.target.lerp(new THREE.Vector3(car.position.x, car.position.y + 1.5, car.position.z), 0.12);
-  controls.update();
+    const paint = new THREE.MeshStandardMaterial({ color: 0x1aa6ff, roughness:0.65, metalness:0.05 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness:1 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x0b1a2a, roughness:0.25, transparent:true, opacity:0.55 });
 
-  renderer.render(scene, camera);
-}
-animate();
+    const bodyMain = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.9, 4.6), paint);
+    bodyMain.castShadow = true; car.add(bodyMain);
 
-addEventListener("resize", () => {
-  renderer.setSize(innerWidth, innerHeight);
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-});
-</script>
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.75, 2.4), paint);
+    cabin.position.set(0, 0.6, -0.25);
+    cabin.castShadow = true; car.add(cabin);
+
+    const win = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.42, 1.75), glass);
+    win.position.set(0, 0.68, -0.25);
+    car.add(win);
+
+    function part(size, pos){
+      const m = new THREE.Mesh(new THREE.BoxGeometry(size[0],size[1],size[2]), paint);
+      m.position.set(pos[0],pos[1],pos[2]);
+      m.castShadow = true;
+      car.add(m);
+      return m;
+    }
+
+    const parts = {
+      hood:    part([2.4,0.18,1.55], [0, 0.18,  1.35]),
+      bumperF: part([2.6,0.35,0.55], [0,-0.12,  2.55]),
+      bumperB: part([2.6,0.35,0.55], [0,-0.12, -2.55]),
+      doorL:   part([0.18,0.65,1.6], [-1.35,0.06,-0.25]),
+      doorR:   part([0.18,0.65,1.6], [ 1.35,0.06,-0.25]),
+      trunk:   part([2.4,0.18,1.2 ], [0, 0.18, -2.05]),
+    };
+
+    // wheel visuals
+    const wheelMeshes = [];
+    for(let i=0;i<4;i++){
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.45,0.45,0.35,20), dark);
+      w.rotation.z = Math.PI/2;
+      w.castShadow = true;
+      scene.add(w);
+      wheelMeshes.push(w);
+    }
+
+    // detached bodies
+    const detached = []; // {mesh, body}
+    function detach(name, impulse){
+      const mesh = parts[name];
+      if(!mesh || mesh.parent !== car) return;
+
+      mesh.updateMatrixWorld(true);
+      const wp = new THREE.Vector3();
+      const wq = new THREE.Quaternion();
+      mesh.matrixWorld.decompose(wp, wq, new THREE.Vector3());
+
+      car.remove(mesh);
+      scene.add(mesh);
+      mesh.position.copy(wp);
+      mesh.quaternion.copy(wq);
+
+      const box = new THREE.Box3().setFromObject(mesh);
+      const sz = new THREE.Vector3(); box.getSize(sz);
+
+      const b = new CANNON.Body({ mass: 8, material: defaultMat });
+      b.addShape(new CANNON.Box(new CANNON.Vec3(sz.x/2, sz.y/2, sz.z/2)));
+      b.position.set(wp.x, wp.y, wp.z);
+      b.quaternion.set(wq.x, wq.y, wq.z, wq.w);
+      b.velocity.set(
+        chassisBody.velocity.x + impulse.x,
+        chassisBody.velocity.y + impulse.y,
+        chassisBody.velocity.z + impulse.z
+      );
+      b.angularVelocity.set((Math.random()-0.5)*10,(Math.random()-0.5)*10,(Math.random()-0.5)*10);
+      world.addBody(b);
+      detached.push({mesh, body:b});
+    }
+
+    // --- Damage based on REAL collision
+    let damage = 0;
+    let lastHit = 0;
+
+    function setDamage(v){
+      damage = clamp(v, 0, 100);
+      dmgEl.textContent = Math.round(damage) + "%";
+      dmgFill.style.transform = "scaleX("+(damage/100)+")";
+
+      // crumple (visual)
+      parts.hood.scale.z = clamp(1 - damage/160, 0.55, 1);
+      parts.bumperF.scale.z = clamp(1 - damage/120, 0.45, 1);
+      parts.bumperB.scale.z = clamp(1 - damage/150, 0.55, 1);
+
+      // paint worse
+      const t = 1 - damage/200;
+      paint.color.setRGB(0.10*t, 0.65*t, 1.0*t);
+    }
+
+    chassisBody.addEventListener("collide", (e)=>{
+      const now = performance.now();
+      if(now - lastHit < 80) return;
+      lastHit = now;
+
+      const ov = e.body && e.body.velocity ? e.body.velocity : new CANNON.Vec3(0,0,0);
+      const rvx = chassisBody.velocity.x - ov.x;
+      const rvy = chassisBody.velocity.y - ov.y;
+      const rvz = chassisBody.velocity.z - ov.z;
+      const rel = Math.sqrt(rvx*rvx + rvy*rvy + rvz*rvz);
+
+      const impact = rel * 12; // tuned
+      if(impact > 22) setDamage(damage + (impact-22)*0.20);
+
+      // detach pieces (strong hits)
+      if(impact > 90 && Math.random()<0.75) detach("bumperF", new THREE.Vector3(0, 3, 6));
+      if(impact > 110 && Math.random()<0.60) detach("hood", new THREE.Vector3(0, 4, 5));
+      if(impact > 125 && Math.random()<0.45) detach("doorL", new THREE.Vector3(-3, 3, 4));
+      if(impact > 130 && Math.random()<0.45) detach("doorR", new THREE.Vector3( 3, 3, 4));
+      if(impact > 150 && Math.random()<0.35) detach("trunk", new THREE.Vector3(0, 3,-5));
+      if(impact > 160 && Math.random()<0.30) detach("bumperB", new THREE.Vector3(0, 3,-6));
+    });
+
+    // --- Drive tuning (feel good)
+    const maxSteer = 0.55;
+    const engine = 14000;     // fast
+    const brake = 95;
+
+    function controlsStep(){
+      const f = keys.has("w");
+      const b = keys.has("s");
+      const l = keys.has("a");
+      const r = keys.has("d");
+      const hb = keys.has(" ");
+
+      let steer = 0;
+      if(l) steer += 1;
+      if(r) steer -= 1;
+      steer *= maxSteer;
+
+      vehicle.setSteeringValue(steer, 0);
+      vehicle.setSteeringValue(steer, 1);
+
+      let force = 0;
+      if(f) force = -engine;
+      if(b) force = engine*0.65;
+
+      vehicle.applyEngineForce(force, 2);
+      vehicle.applyEngineForce(force, 3);
+
+      const br = (hb ? brake : 0) + (!f && !b ? 8 : 0);
+      for(let i=0;i<4;i++) vehicle.setBrake(br, i);
+    }
+
+    function reset(){
+      setDamage(0);
+
+      // reattach parts
+      for(const k in parts){
+        const m = parts[k];
+        if(m.parent !== car){
+          // remove physics body for this detached mesh
+          const idx = detached.findIndex(d => d.mesh === m);
+          if(idx >= 0){
+            world.removeBody(detached[idx].body);
+            detached.splice(idx,1);
+          }
+          scene.remove(m);
+          car.add(m);
+          m.scale.set(1,1,1);
+        } else {
+          m.scale.set(1,1,1);
+        }
+      }
+      while(detached.length){
+        const d = detached.pop();
+        scene.remove(d.mesh);
+        world.removeBody(d.body);
+      }
+
+      chassisBody.position.set(0, 2.5, 0);
+      chassisBody.velocity.set(0,0,0);
+      chassisBody.angularVelocity.set(0,0,0);
+      chassisBody.quaternion.set(0,0,0,1);
+      chassisBody.wakeUp();
+
+      controls.target.set(0, 1.6, 0);
+      camera.position.set(-10, 7, -12);
+    }
+
+    resetBtn.onclick = reset;
+    addEventListener("keydown",(e)=>{ if(e.key.toLowerCase()==="r") reset(); });
+
+    // --- Loop
+    let lastT = performance.now();
+    function tick(){
+      requestAnimationFrame(tick);
+      const t = performance.now();
+      const dt = Math.min((t-lastT)/1000, 1/30);
+      lastT = t;
+
+      controlsStep();
+      world.step(1/60, dt, 3);
+
+      // sync car
+      car.position.set(chassisBody.position.x, chassisBody.position.y, chassisBody.position.z);
+      car.quaternion.set(chassisBody.quaternion.x, chassisBody.quaternion.y, chassisBody.quaternion.z, chassisBody.quaternion.w);
+
+      // wheels
+      for(let i=0;i<vehicle.wheelInfos.length;i++){
+        vehicle.updateWheelTransform(i);
+        const wt = vehicle.wheelInfos[i].worldTransform;
+        wheelMeshes[i].position.set(wt.position.x, wt.position.y, wt.position.z);
+        wheelMeshes[i].quaternion.set(wt.quaternion.x, wt.quaternion.y, wt.quaternion.z, wt.quaternion.w);
+      }
+
+      // detached sync
+      for(const d of detached){
+        d.mesh.position.set(d.body.position.x, d.body.position.y, d.body.position.z);
+        d.mesh.quaternion.set(d.body.quaternion.x, d.body.quaternion.y, d.body.quaternion.z, d.body.quaternion.w);
+      }
+
+      // speed UI
+      const v = chassisBody.velocity;
+      const sp = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+      spdEl.textContent = Math.round(sp*3.6) + " km/h";
+
+      // cam follow target
+      controls.target.lerp(new THREE.Vector3(car.position.x, car.position.y+1.4, car.position.z), 0.14);
+      controls.update();
+
+      renderer.render(scene, camera);
+    }
+    tick();
+
+    addEventListener("resize", ()=>{
+      renderer.setSize(innerWidth, innerHeight);
+      camera.aspect = innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+    });
+  })();
+  </script>
 </body>
 </html>
