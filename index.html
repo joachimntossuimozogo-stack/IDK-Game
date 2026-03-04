@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Super Clicker</title>
+<style>
+body{
+    background:#111;
+    color:white;
+    text-align:center;
+    font-family:Arial;
+}
+
+button{
+    font-size:30px;
+    padding:20px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Super Clicker</h1>
+
+<h2>Score : <span id="score">0</span></h2>
+
+<button onclick="addPoint()">CLICK</button>
+
+<script>
+
+let score = 0
+
+function addPoint(){
+    score++
+    document.getElementById("score").innerText = score
+}
+
+</script>
+
+</body>
+</html>
