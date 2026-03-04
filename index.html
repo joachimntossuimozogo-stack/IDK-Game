@@ -1,116 +1,739 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
-<title>Dodge Game</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crash Playground (Mini BeamNG 2D)</title>
+  <style>
+    :root{
+      --bg:#0b0f16;
+      --panel:#101827;
+      --ink:#e8f0ff;
+      --muted:#9db0d8;
+      --good:#64ff9a;
+      --warn:#ffd166;
+      --bad:#ff4d4d;
+      --line:rgba(255,255,255,.12);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background: radial-gradient(1000px 600px at 50% 25%, #121d3a 0%, var(--bg) 55%, #060810 100%);
+      color:var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      overflow:hidden;
+    }
+    canvas{display:block; width:100vw; height:100vh}
 
-<style>
+    /* UI */
+    .ui{
+      position:fixed; inset:0; pointer-events:none;
+      padding:14px;
+      display:flex; justify-content:space-between; align-items:flex-start;
+      gap:12px;
+    }
+    .panel{
+      pointer-events:auto;
+      background: linear-gradient(180deg, rgba(16,24,39,.85), rgba(10,14,22,.75));
+      border:1px solid var(--line);
+      border-radius:16px;
+      padding:12px 12px;
+      backdrop-filter: blur(10px);
+      box-shadow:0 20px 60px rgba(0,0,0,.45);
+      min-width: 240px;
+    }
+    .title{font-weight:900; letter-spacing:.2px}
+    .muted{color:var(--muted); font-size:12px; line-height:1.35}
+    .row{display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:13px; margin-top:8px}
+    .bar{
+      height:10px; border-radius:999px; background:rgba(255,255,255,.10);
+      overflow:hidden; margin-top:6px;
+    }
+    .fill{height:100%; width:100%; transform-origin:left; transform:scaleX(0.2);
+      background: linear-gradient(90deg, var(--good), var(--warn), var(--bad));
+    }
+    .btns{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+    button{
+      pointer-events:auto;
+      border:none; cursor:pointer;
+      border-radius:12px;
+      padding:10px 12px;
+      font-weight:800;
+      background: rgba(0,0,0,.35);
+      color:var(--ink);
+      border:1px solid rgba(255,255,255,.14);
+    }
+    button:hover{background:rgba(255,255,255,.06)}
+    button:active{transform:translateY(1px)}
+    .danger{border-color: rgba(255,77,77,.35)}
+    .good{border-color: rgba(100,255,154,.25)}
 
-body{
-background:#111;
-color:white;
-text-align:center;
-font-family:Arial;
-}
-
-canvas{
-background:#222;
-margin-top:20px;
-}
-
-</style>
-
+    /* Menu overlay */
+    .overlay{
+      position:fixed; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      background: rgba(0,0,0,.66);
+      backdrop-filter: blur(10px);
+      padding:16px;
+    }
+    .card{
+      width:min(780px, 100%);
+      background: linear-gradient(180deg, rgba(18,26,46,.92), rgba(8,10,16,.92));
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:20px;
+      box-shadow:0 30px 120px rgba(0,0,0,.75);
+      padding:16px;
+      display:grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap:14px;
+    }
+    .card h1{margin:0; font-size:22px; font-weight:950}
+    .card p{margin:8px 0 0; color:var(--muted); font-size:13px; line-height:1.4}
+    .box{
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      padding:12px;
+      background: rgba(0,0,0,.25);
+    }
+    .cars{display:grid; gap:10px; margin-top:10px}
+    .carBtn{
+      display:flex; justify-content:space-between; align-items:center; gap:10px;
+      width:100%;
+      padding:12px;
+      border-radius:14px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.28);
+      cursor:pointer;
+      color:var(--ink);
+      font-weight:900;
+    }
+    .carBtn small{display:block; color:var(--muted); font-weight:700; margin-top:2px}
+    .carBtn.active{border-color: rgba(100,255,154,.35); background: rgba(100,255,154,.06)}
+    .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px}
+    .pill{
+      display:inline-flex; gap:6px; align-items:center;
+      padding:6px 10px; border-radius:999px;
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.10);
+      font-size:12px; color:var(--muted);
+    }
+    .kbd{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      padding:2px 6px; border-radius:8px;
+      background: rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--ink);
+      font-weight:900;
+      font-size:12px;
+    }
+    @media (max-width: 860px){
+      .card{grid-template-columns:1fr}
+    }
+  </style>
 </head>
-
 <body>
+  <canvas id="c"></canvas>
 
-<h1>Dodge Game</h1>
-<h2>Score : <span id="score">0</span></h2>
+  <div class="ui" id="ui" style="display:none;">
+    <div class="panel">
+      <div class="title">Crash Playground</div>
+      <div class="muted" id="carName">Car: —</div>
 
-<canvas id="game" width="400" height="500"></canvas>
+      <div class="row"><span>Speed</span><b id="spd">0</b></div>
+      <div class="row"><span>Damage</span><b id="dmg">0%</b></div>
+      <div class="bar"><div class="fill" id="dmgFill"></div></div>
+
+      <div class="row"><span>Gear</span><b id="gear">D</b></div>
+      <div class="row"><span>Drift</span><b id="drift">OFF</b></div>
+
+      <div class="btns">
+        <button class="good" id="resetBtn">Reset (R)</button>
+        <button id="menuBtn">Menu (Esc)</button>
+        <button class="danger" id="explodeBtn">Boom 💥</button>
+      </div>
+
+      <div class="muted" style="margin-top:10px">
+        <span class="pill"><span class="kbd">↑</span>/<span class="kbd">W</span> accélérer</span>
+        <span class="pill"><span class="kbd">↓</span>/<span class="kbd">S</span> freiner/reculer</span><br>
+        <span class="pill"><span class="kbd">←</span><span class="kbd">→</span> tourner</span>
+        <span class="pill"><span class="kbd">Space</span> drift</span>
+      </div>
+    </div>
+
+    <div class="panel" style="min-width:260px">
+      <div class="title">Map</div>
+      <div class="muted">Sandbox: murs, blocs, rampes (visuel). Fais des crash tests 😈</div>
+      <div class="row"><span>Checkpoint</span><b id="cp">1</b></div>
+      <div class="row"><span>Time</span><b id="time">0.0s</b></div>
+      <div class="muted" style="margin-top:8px">Astuce: si tu tapes fort → damage monte + voiture se “dégrade”.</div>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <div class="box">
+        <h1>Mini BeamNG 2D – Crash Playground</h1>
+        <p>
+          C’est une version “sandbox crash” simple (pas du vrai soft-body), mais c’est fun et propre.
+          Choisis ta voiture et lance-toi sur la map.
+        </p>
+
+        <div class="grid2">
+          <div class="pill">Objectif: <b style="color:var(--ink)">faire des crash tests</b></div>
+          <div class="pill">Bonus: <b style="color:var(--ink)">drift + boosts</b></div>
+        </div>
+
+        <div class="muted" style="margin-top:10px">
+          <span class="kbd">R</span> reset • <span class="kbd">Esc</span> menu • <span class="kbd">Space</span> drift
+        </div>
+
+        <div class="btns" style="margin-top:12px">
+          <button class="good" id="startBtn">START</button>
+          <button id="qualityBtn">Graphics: HIGH</button>
+        </div>
+      </div>
+
+      <div class="box">
+        <div class="title">Choose your car</div>
+        <div class="cars" id="cars"></div>
+        <div class="muted" style="margin-top:10px">
+          ✔ Vérif/amis/followers = projet “site + base de données”. Là on fait le jeu voiture.
+        </div>
+      </div>
+    </div>
+  </div>
 
 <script>
+(() => {
+  // ===== Canvas setup (HiDPI safe)
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  function resize(){
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    canvas.width = Math.floor(innerWidth * DPR);
+    canvas.height = Math.floor(innerHeight * DPR);
+    canvas.style.width = innerWidth + "px";
+    canvas.style.height = innerHeight + "px";
+  }
+  window.addEventListener("resize", resize);
+  resize();
 
-const canvas = document.getElementById("game")
-const ctx = canvas.getContext("2d")
+  // ===== UI
+  const overlay = document.getElementById("overlay");
+  const ui = document.getElementById("ui");
+  const carsWrap = document.getElementById("cars");
+  const startBtn = document.getElementById("startBtn");
+  const qualityBtn = document.getElementById("qualityBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const menuBtn = document.getElementById("menuBtn");
+  const explodeBtn = document.getElementById("explodeBtn");
 
-let player = {
-x:180,
-y:450,
-w:40,
-h:40
-}
+  const carNameEl = document.getElementById("carName");
+  const spdEl = document.getElementById("spd");
+  const dmgEl = document.getElementById("dmg");
+  const dmgFill = document.getElementById("dmgFill");
+  const gearEl = document.getElementById("gear");
+  const driftEl = document.getElementById("drift");
+  const cpEl = document.getElementById("cp");
+  const timeEl = document.getElementById("time");
 
-let blocks = []
-let score = 0
-let speed = 3
+  // ===== Cars
+  const CARS = [
+    { id:"street", name:"Street", desc:"balanced • medium grip", color:"#00e5ff", mass:1.0, engine:1.0, grip:1.0, max:1.0 },
+    { id:"drift",  name:"Drift",  desc:"low grip • easy slides", color:"#ffd166", mass:0.95, engine:0.95, grip:0.72, max:1.05 },
+    { id:"truck",  name:"Truck",  desc:"heavy • strong impacts", color:"#64ff9a", mass:1.35, engine:0.90, grip:0.92, max:0.90 },
+    { id:"rocket", name:"Rocket", desc:"fast • hard to control", color:"#ff4d4d", mass:0.92, engine:1.35, grip:0.85, max:1.35 },
+  ];
+  let selectedCar = CARS[0];
+  let highGraphics = true;
 
-document.addEventListener("keydown", e => {
+  function renderCarButtons(){
+    carsWrap.innerHTML = "";
+    CARS.forEach(car => {
+      const btn = document.createElement("button");
+      btn.className = "carBtn" + (car.id === selectedCar.id ? " active" : "");
+      btn.innerHTML = `
+        <div>
+          ${car.name} <small>${car.desc}</small>
+        </div>
+        <div style="width:18px;height:18px;border-radius:6px;background:${car.color};border:1px solid rgba(255,255,255,.25)"></div>
+      `;
+      btn.onclick = () => {
+        selectedCar = car;
+        renderCarButtons();
+      };
+      carsWrap.appendChild(btn);
+    });
+  }
+  renderCarButtons();
 
-if(e.key == "ArrowLeft"){
-player.x -= 20
-}
+  // ===== World (large map)
+  const WORLD = { w: 5200, h: 3200 };
 
-if(e.key == "ArrowRight"){
-player.x += 20
-}
+  // Walls/obstacles are rectangles in world coords
+  const obstacles = [];
+  const ramps = []; // visual only (gives a speed boost if you go through)
 
-})
+  function addRect(x,y,w,h,tag="wall"){
+    obstacles.push({x,y,w,h,tag});
+  }
+  function addRamp(x,y,w,h,angle=0){
+    ramps.push({x,y,w,h,angle});
+  }
 
-function spawnBlock(){
+  // Build a simple playground map
+  function buildMap(){
+    obstacles.length = 0;
+    ramps.length = 0;
 
-blocks.push({
-x:Math.random()*360,
-y:-20,
-w:40,
-h:40
-})
+    // Outer bounds (thick walls)
+    addRect(-200, -200, WORLD.w+400, 200, "bound");
+    addRect(-200, WORLD.h, WORLD.w+400, 200, "bound");
+    addRect(-200, 0, 200, WORLD.h, "bound");
+    addRect(WORLD.w, 0, 200, WORLD.h, "bound");
 
-}
+    // Crash blocks area
+    for(let i=0;i<18;i++){
+      const x = 700 + (i%6)*220;
+      const y = 420 + Math.floor(i/6)*220;
+      addRect(x,y,120,120,"block");
+    }
 
-setInterval(spawnBlock,1000)
+    // Long highway corridor
+    addRect(1800, 250, 30, 900, "wall");
+    addRect(2600, 250, 30, 900, "wall");
+    addRect(1800, 250, 830, 30, "wall");
+    addRect(1800, 1120, 830, 30, "wall");
 
-function gameLoop(){
+    // Slalom barriers
+    for(let i=0;i<9;i++){
+      addRect(1900 + (i%2)*420, 360 + i*80, 80, 20, "bar");
+    }
 
-ctx.clearRect(0,0,400,500)
+    // Arena
+    addRect(3400, 500, 600, 30, "wall");
+    addRect(3400, 1100, 600, 30, "wall");
+    addRect(3400, 500, 30, 630, "wall");
+    addRect(3970, 500, 30, 630, "wall");
+    // arena obstacles
+    for(let i=0;i<10;i++){
+      addRect(3500 + Math.random()*380, 600 + Math.random()*420, 70, 70, "block");
+    }
 
-ctx.fillStyle="cyan"
-ctx.fillRect(player.x,player.y,player.w,player.h)
+    // Ramps (boost zones)
+    addRamp(1200, 1500, 240, 90);
+    addRamp(2100, 1750, 260, 90);
+    addRamp(3800, 1400, 300, 100);
 
-ctx.fillStyle="red"
+    // Big “crash wall”
+    addRect(900, 2300, 1200, 40, "bigwall");
+    // Some pillars
+    for(let i=0;i<8;i++){
+      addRect(2500 + i*180, 2350, 60, 160, "pillar");
+    }
+  }
+  buildMap();
 
-for(let i=0;i<blocks.length;i++){
+  // Checkpoints (for fun UI)
+  const checkpoints = [
+    {x: 520, y: 420},
+    {x: 2200, y: 700},
+    {x: 3700, y: 820},
+    {x: 1400, y: 2350},
+  ];
+  let cpIndex = 0;
 
-let b = blocks[i]
+  // ===== Car physics (simple but stable)
+  const car = {
+    x: 520, y: 520,
+    vx: 0, vy: 0,
+    ang: 0,  // radians
+    steer: 0,
+    r: 18,   // collision radius
+    damage: 0, // 0..100
+  };
 
-b.y += speed
+  let startedAt = 0;
+  let running = false;
 
-ctx.fillRect(b.x,b.y,b.w,b.h)
+  const keys = new Set();
+  window.addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase();
+    if(["arrowup","arrowdown","arrowleft","arrowright","w","a","s","d"," ","escape","r"].includes(k)){
+      e.preventDefault();
+    }
+    keys.add(k);
 
-if(
-player.x < b.x + b.w &&
-player.x + player.w > b.x &&
-player.y < b.y + b.h &&
-player.y + player.h > b.y
-){
-alert("Game Over ! Score : "+score)
-location.reload()
-}
+    if(k === "escape"){
+      openMenu();
+    }
+    if(k === "r"){
+      resetCar();
+    }
+  });
+  window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 
-if(b.y > 500){
-score++
-document.getElementById("score").innerText = score
-blocks.splice(i,1)
-}
+  function resetCar(){
+    car.x = 520; car.y = 520;
+    car.vx = 0; car.vy = 0;
+    car.ang = 0;
+    car.damage = Math.max(0, car.damage - 8); // small repair
+    cpIndex = 0;
+    startedAt = performance.now();
+  }
 
-}
+  function openMenu(){
+    running = false;
+    overlay.style.display = "flex";
+    ui.style.display = "none";
+  }
 
-requestAnimationFrame(gameLoop)
+  function startGame(){
+    // apply car stats
+    car.r = 18 * (0.95 + selectedCar.mass*0.12);
+    car.damage = 0;
+    resetCar();
+    carNameEl.textContent = `Car: ${selectedCar.name}`;
+    overlay.style.display = "none";
+    ui.style.display = "flex";
+    running = true;
+  }
 
-}
+  startBtn.onclick = startGame;
+  qualityBtn.onclick = () => {
+    highGraphics = !highGraphics;
+    qualityBtn.textContent = "Graphics: " + (highGraphics ? "HIGH" : "LOW");
+  };
+  resetBtn.onclick = resetCar;
+  menuBtn.onclick = openMenu;
 
-gameLoop()
+  // “Boom” button (just for fun)
+  explodeBtn.onclick = () => {
+    car.vx += (Math.random()*2-1)*22;
+    car.vy += (Math.random()*2-1)*22;
+    car.damage = Math.min(100, car.damage + 12);
+  };
 
+  // ===== Math helpers
+  const clamp = (n,a,b)=>Math.max(a,Math.min(b,n));
+  const len = (x,y)=>Math.hypot(x,y);
+  const dot = (ax,ay,bx,by)=>ax*bx+ay*by;
+
+  // Circle vs AABB collision
+  function collideCircleRect(cx,cy,cr, rx,ry,rw,rh){
+    const nx = clamp(cx, rx, rx+rw);
+    const ny = clamp(cy, ry, ry+rh);
+    const dx = cx - nx;
+    const dy = cy - ny;
+    const d2 = dx*dx + dy*dy;
+    if(d2 > cr*cr) return null;
+    const d = Math.sqrt(d2) || 0.0001;
+    return { nx, ny, dx, dy, d };
+  }
+
+  // ===== Update
+  function update(dt){
+    // controls
+    const up = keys.has("arrowup") || keys.has("w");
+    const down = keys.has("arrowdown") || keys.has("s");
+    const left = keys.has("arrowleft") || keys.has("a");
+    const right = keys.has("arrowright") || keys.has("d");
+    const drift = keys.has(" ");
+
+    // Stats from selected car + damage reduces control
+    const dmgFactor = 1 - (car.damage/140); // at 100 damage -> ~0.28
+    const engine = 22 * selectedCar.engine * dmgFactor;
+    const maxSpeed = 38 * selectedCar.max * dmgFactor;
+    const grip = selectedCar.grip * (drift ? 0.45 : 1.0) * (0.55 + dmgFactor*0.65);
+    const turnRate = 2.8 * (0.6 + selectedCar.grip*0.5) * (0.6 + dmgFactor*0.6);
+
+    // forward vector from angle
+    const fx = Math.cos(car.ang);
+    const fy = Math.sin(car.ang);
+
+    // steering
+    let steer = 0;
+    if(left) steer -= 1;
+    if(right) steer += 1;
+
+    // speed along forward
+    const fwdSpeed = dot(car.vx, car.vy, fx, fy);
+
+    // turning stronger when moving
+    const turnStrength = turnRate * clamp(Math.abs(fwdSpeed)/18, 0.25, 1.0);
+    car.ang += steer * turnStrength * dt * (fwdSpeed >= 0 ? 1 : -1);
+
+    // acceleration/brake
+    if(up){
+      car.vx += fx * engine * dt;
+      car.vy += fy * engine * dt;
+    } else if(down){
+      // brake / reverse
+      car.vx -= fx * engine * 0.85 * dt;
+      car.vy -= fy * engine * 0.85 * dt;
+    }
+
+    // lateral friction (grip): damp sideways velocity
+    // decompose velocity into forward + sideways
+    const sx = -fy, sy = fx;
+    const sideSpeed = dot(car.vx, car.vy, sx, sy);
+
+    // reduce side speed
+    const sideDamp = clamp(grip * 10 * dt, 0, 0.75);
+    car.vx -= sx * sideSpeed * sideDamp;
+    car.vy -= sy * sideSpeed * sideDamp;
+
+    // rolling resistance
+    car.vx *= (1 - clamp(0.80*dt, 0, 0.06));
+    car.vy *= (1 - clamp(0.80*dt, 0, 0.06));
+
+    // cap speed
+    const sp = len(car.vx, car.vy);
+    if(sp > maxSpeed){
+      const s = maxSpeed / sp;
+      car.vx *= s;
+      car.vy *= s;
+    }
+
+    // move
+    car.x += car.vx * dt * 60; // scaled for feel
+    car.y += car.vy * dt * 60;
+
+    // collisions with obstacles
+    for(const o of obstacles){
+      const hit = collideCircleRect(car.x, car.y, car.r, o.x, o.y, o.w, o.h);
+      if(!hit) continue;
+
+      // normal from rect -> circle
+      const nx = hit.dx / hit.d;
+      const ny = hit.dy / hit.d;
+
+      // push out
+      const overlap = car.r - hit.d;
+      car.x += nx * overlap;
+      car.y += ny * overlap;
+
+      // bounce / reflect velocity along normal
+      const vn = dot(car.vx, car.vy, nx, ny);
+      if(vn < 0){
+        // impact strength
+        const impact = Math.abs(vn) * 18; // tuning
+        // reflect with restitution (less bounce when damaged)
+        const restitution = 0.35 + (1 - car.damage/120)*0.25;
+        car.vx -= (1 + restitution) * vn * nx;
+        car.vy -= (1 + restitution) * vn * ny;
+
+        // add damage based on impact and car mass
+        const dmgAdd = impact * (0.014 + selectedCar.mass*0.006);
+        car.damage = clamp(car.damage + dmgAdd, 0, 100);
+      }
+    }
+
+    // ramps (boost zones)
+    for(const r of ramps){
+      const inside = (car.x > r.x && car.x < r.x+r.w && car.y > r.y && car.y < r.y+r.h);
+      if(inside){
+        // boost forward slightly
+        car.vx += fx * 10 * dt;
+        car.vy += fy * 10 * dt;
+        // small "shake" via damage min? no
+      }
+    }
+
+    // checkpoints
+    const cp = checkpoints[cpIndex];
+    if(cp){
+      if(len(car.x - cp.x, car.y - cp.y) < 120){
+        cpIndex = (cpIndex + 1) % checkpoints.length;
+      }
+    }
+  }
+
+  // ===== Render
+  function draw(){
+    const w = canvas.width, h = canvas.height;
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,w,h);
+
+    // Camera follows car
+    const camX = car.x - (innerWidth/2);
+    const camY = car.y - (innerHeight/2);
+
+    // Apply DPR + camera
+    ctx.setTransform(DPR,0,0,DPR, -camX*DPR, -camY*DPR);
+
+    // Background grid
+    const grid = 120;
+    ctx.fillStyle = "#0c1220";
+    ctx.fillRect(0,0,WORLD.w,WORLD.h);
+
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = "rgba(255,255,255,.08)";
+    ctx.lineWidth = 1;
+    for(let x=0; x<=WORLD.w; x+=grid){
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,WORLD.h); ctx.stroke();
+    }
+    for(let y=0; y<=WORLD.h; y+=grid){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(WORLD.w,y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // Ramps
+    for(const r of ramps){
+      ctx.save();
+      ctx.translate(r.x + r.w/2, r.y + r.h/2);
+      ctx.rotate(r.angle);
+      ctx.translate(-r.w/2, -r.h/2);
+      ctx.fillStyle = "rgba(120,160,255,.12)";
+      ctx.fillRect(0,0,r.w,r.h);
+      ctx.strokeStyle = "rgba(120,160,255,.35)";
+      ctx.strokeRect(0,0,r.w,r.h);
+      if(highGraphics){
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = "rgba(255,255,255,.10)";
+        for(let i=0;i<10;i++){
+          ctx.fillRect(i*(r.w/10), 0, 6, r.h);
+        }
+        ctx.globalAlpha = 1;
+      }
+      ctx.restore();
+    }
+
+    // Obstacles
+    for(const o of obstacles){
+      let col = "rgba(255,77,77,.75)";
+      if(o.tag === "block") col = "rgba(255,77,77,.65)";
+      if(o.tag === "bar") col = "rgba(255,200,90,.55)";
+      if(o.tag === "pillar") col = "rgba(255,77,77,.55)";
+      if(o.tag === "bigwall") col = "rgba(255,77,77,.85)";
+      if(o.tag === "bound") col = "rgba(255,255,255,.08)";
+
+      ctx.fillStyle = col;
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+
+      if(highGraphics){
+        ctx.strokeStyle = "rgba(0,0,0,.35)";
+        ctx.strokeRect(o.x, o.y, o.w, o.h);
+      }
+    }
+
+    // Checkpoint markers
+    for(let i=0;i<checkpoints.length;i++){
+      const p = checkpoints[i];
+      const active = (i === cpIndex);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, active ? 16 : 10, 0, Math.PI*2);
+      ctx.fillStyle = active ? "rgba(100,255,154,.85)" : "rgba(157,176,216,.35)";
+      ctx.fill();
+      if(highGraphics){
+        ctx.strokeStyle = "rgba(255,255,255,.2)";
+        ctx.stroke();
+      }
+    }
+
+    // Car
+    ctx.save();
+    ctx.translate(car.x, car.y);
+    ctx.rotate(car.ang);
+
+    // “Damage” visual: cracks + darker
+    const dmg = car.damage/100;
+    const base = selectedCar.color;
+    ctx.fillStyle = base;
+    // car body
+    const bw = 46, bh = 26;
+    ctx.beginPath();
+    ctx.roundRect(-bw/2, -bh/2, bw, bh, 8);
+    ctx.fill();
+
+    // windshield
+    ctx.globalAlpha = 0.22 + (1-dmg)*0.2;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.roundRect(-10, -8, 20, 16, 6);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // wheels
+    ctx.fillStyle = "rgba(0,0,0,.55)";
+    ctx.fillRect(-bw/2+2, -bh/2-4, 12, 6);
+    ctx.fillRect(bw/2-14, -bh/2-4, 12, 6);
+    ctx.fillRect(-bw/2+2, bh/2-2, 12, 6);
+    ctx.fillRect(bw/2-14, bh/2-2, 12, 6);
+
+    // damage overlay
+    if(dmg > 0.02){
+      ctx.globalAlpha = 0.20 + dmg*0.55;
+      ctx.fillStyle = "rgba(0,0,0,.55)";
+      ctx.beginPath();
+      ctx.roundRect(-bw/2, -bh/2, bw, bh, 8);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      if(highGraphics){
+        ctx.strokeStyle = "rgba(255,255,255,.18)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-16, -4); ctx.lineTo(0, 0); ctx.lineTo(16, 6);
+        ctx.stroke();
+      }
+    }
+
+    // direction arrow
+    ctx.fillStyle = "rgba(255,255,255,.25)";
+    ctx.beginPath();
+    ctx.moveTo(18,0); ctx.lineTo(10,-6); ctx.lineTo(10,6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+
+    // Particles (simple skid)
+    if(highGraphics && running){
+      const sp = Math.hypot(car.vx, car.vy);
+      const drifting = keys.has(" ") && sp > 8;
+      if(drifting){
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = "rgba(255,255,255,.22)";
+        for(let i=0;i<2;i++){
+          const px = car.x + (Math.random()*18-9);
+          const py = car.y + (Math.random()*18-9);
+          ctx.fillRect(px, py, 8, 2);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  // ===== Main loop
+  let last = performance.now();
+  function loop(now){
+    const dt = clamp((now - last) / 1000, 0, 0.05);
+    last = now;
+
+    if(running){
+      update(dt);
+      // UI update
+      const speed = Math.hypot(car.vx, car.vy);
+      spdEl.textContent = Math.round(speed*3.2) + " km/h";
+      dmgEl.textContent = Math.round(car.damage) + "%";
+      dmgFill.style.transform = `scaleX(${car.damage/100})`;
+      driftEl.textContent = (keys.has(" ") ? "ON" : "OFF");
+      gearEl.textContent = (keys.has("arrowdown")||keys.has("s")) ? "R" : "D";
+      cpEl.textContent = String(cpIndex+1);
+      timeEl.textContent = (((performance.now()-startedAt)/1000).toFixed(1)) + "s";
+    }
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // start in menu
+  openMenu();
+
+})();
 </script>
-
 </body>
 </html>
